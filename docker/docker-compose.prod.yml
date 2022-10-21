@@ -1,0 +1,32 @@
+version: "3"
+
+services:
+  db:
+    image: postgres:14.5
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    expose:
+      - 5432
+  indexer:
+    image: voidxnull/zeropool-indexer:latest
+    depends_on:
+      - db
+    volumes:
+      - ./.near:~/.near
+    ports:
+      - "80:80"
+    environment:
+      - DATABASE_URL="postgres://postgres:postgres@db:5432/postgres"
+      - NETWORK="near"
+      - PORT=80
+      - CONTRACT_ADDRESS="zeropool.voidxnull-test.testnet"
+      - NEAR_CHAIN_ID="testnet"
+      - NEAR_INDEXER_URL="postgres://public_readonly:nearprotocol@testnet.db.explorer.indexer.near.dev/testnet_explorer"
+      - NEAR_INDEXER_START_HEIGHT=0
+      - VIRTUAL_HOST=near.testnet.indexer.v2.zeropool.network
+      - LETSENCRYPT_HOST=near.testnet.indexer.v2.zeropool.network
+      - LETSENCRYPT_EMAIL=mail@test.com

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# TODO: Versioning
+
+USERNAME=voidxnull
+IMAGE=zeropool-indexer
+
+docker build -f ./docker/Dockerfile.indexer -t $USERNAME/$IMAGE:latest . && \
+docker push $USERNAME/$IMAGE:latest

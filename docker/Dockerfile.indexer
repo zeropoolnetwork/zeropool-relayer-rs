@@ -1,0 +1,23 @@
+FROM rust:latest as build
+
+RUN apt-get update && apt-get install -y clang
+
+# Cache dependencies
+RUN USER=root cargo new --bin zeropool-indexer
+WORKDIR /zeropool-indexer
+COPY ./Cargo.lock ./Cargo.lock
+COPY ./indexer/Cargo.toml ./Cargo.toml
+RUN cargo build --release
+
+# Build
+RUN rm src/*.rs
+RUN rm ./target/release/deps/zeropool_indexer*
+COPY ./indexer/src ./src
+COPY ./indexer/sqlx-data.json ./
+RUN cargo build --release
+
+# Final image
+FROM rust:latest-slim-buster
+
+COPY --from=build /zeropool-indexer/target/release/zeropool-indexer .
+CMD ["./zeropool-indexer"]
