@@ -43,7 +43,9 @@ pub async fn start(
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
-        let mut last_block_height = starting_block_height.unwrap_or(0);
+        let mut last_block_height = starting_block_height
+            .or(backend_config.indexer_start_height)
+            .unwrap_or(0);
 
         tracing::info!("Listening for new transactions");
         loop {
@@ -95,21 +97,32 @@ async fn fetch_transactions(
     }
 
     let recs = loop {
-        let res = sqlx::query_as::<_, Record>("
-            SELECT tx.transaction_hash, tx.block_timestamp, tx.signer_account_id,
-                   tx.receiver_account_id, tx.signature, tx.included_in_block_hash,
-                   b.block_height,
-                   a.args
+        // TODO?: AND a.args->>'method_name' = 'transact'
+        let res = sqlx::query_as::<_, Record>(
+            "
+            SELECT
+                tx.transaction_hash,
+                tx.block_timestamp,
+                tx.signer_account_id,
+                tx.receiver_account_id,
+                tx.signature,
+                tx.included_in_block_hash,
+                b.block_height,
+                a.args
             FROM transactions AS tx
-            JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
-            JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
-            WHERE tx.receiver_account_id = ? AND a.action_kind = 'FUNCTION_CALL' AND b.block_height > ?
+                JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
+                JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
+            WHERE
+                tx.receiver_account_id = $1
+                AND a.action_kind = 'FUNCTION_CALL'
+                AND b.block_height > $2
             ORDER BY tx.block_timestamp ASC
-        ",)
-            .bind(contract_address)
-            .bind(from_block as i64)
-            .fetch_all(&mut *conn)
-            .await;
+        ",
+        )
+        .bind(contract_address)
+        .bind(from_block as i64)
+        .fetch_all(&mut *conn)
+        .await;
 
         match res {
             Ok(recs) => break recs,
@@ -126,6 +139,7 @@ async fn fetch_transactions(
     let mut txs = Vec::new();
 
     for rec in recs {
+        tracing::trace!("Processing tx {}", rec.transaction_hash);
         if let Some(method_name) = rec.args.get("method_name") {
             if method_name.as_str() != Some("transact") {
                 continue;
