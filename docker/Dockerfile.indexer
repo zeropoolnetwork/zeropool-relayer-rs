@@ -17,7 +17,7 @@ COPY ./indexer/sqlx-data.json ./
 RUN cargo build --release
 
 # Final image
-FROM rust:latest-slim-buster
+FROM rust:latest
 
 COPY --from=build /zeropool-indexer/target/release/zeropool-indexer .
 CMD ["./zeropool-indexer"]

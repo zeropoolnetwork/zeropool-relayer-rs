@@ -1,11 +1,17 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use near_indexer::{
     near_primitives::views::{ActionView, ExecutionStatusView},
     InitConfigArgs,
 };
+use num_traits::ToPrimitive;
 use serde::Deserialize;
+use sqlx::{
+    postgres::{PgConnection, PgPoolOptions},
+    types::{BigDecimal, JsonValue},
+    Connection,
+};
 // use sqlx::{postgres::PgPoolOptions, types::BigDecimal, PgPool};
 use tokio::sync::mpsc;
 
@@ -17,6 +23,7 @@ pub const BACKEND_NAME: &str = "NEAR";
 pub struct Config {
     pub contract_address: String,
     pub chain_id: String,
+    pub indexer_pg_url: String,
     pub indexer_start_height: Option<u64>,
     pub config_dir: Option<PathBuf>,
 }
@@ -41,9 +48,9 @@ pub async fn start(
         num_shards: 0,
         fast: false,
         genesis: None,
-        download_genesis: false,
+        download_genesis: true,
         download_genesis_url: None,
-        download_config: false,
+        download_config: true,
         download_config_url: None,
         boot_nodes: None,
         max_gas_burnt_view: None,
@@ -53,7 +60,7 @@ pub async fn start(
     let home_dir_clone = home_dir.clone();
     tokio::task::spawn_blocking(move || {
         if let Err(e) = near_indexer::indexer_init_configs(&home_dir_clone, init_config) {
-            tracing::warn!("Failed to initialize near state: {e}");
+            tracing::warn!("{e}");
         }
     })
     .await?;
@@ -140,64 +147,91 @@ async fn listen_blocks(
     }
 }
 
-// // Using block timestamp instead of block height to avoid an extra join
-// /// Used for pre-initializing the database.
-// pub async fn fetch_transactions(&self, from_block_timestamp: u64) -> Result<Vec<Tx>> {
-//     let pg = PgPoolOptions::new()
-//         .max_connections(1)
-//         .connect(&config.near_indexer_url)
-//         .await?;
-//     #[derive(sqlx::FromRow)]
-//     struct Record {
-//         transaction_hash: String,
-//         block_timestamp: BigDecimal,
-//         included_in_block_hash: String,
-//         signer_account_id: String,
-//         receiver_account_id: String,
-//         signature: String,
-//         args: JsonValue,
-//         block_height: BigDecimal,
-//     }
-//
-//     let recs = sqlx::query_as::<_, Record>("
-//         SELECT tx.transaction_hash, tx.block_timestamp, tx.signer_account_id,
-//                tx.receiver_account_id, tx.signature, tx.included_in_block_hash,
-//                b.block_height,
-//                a.args
-//         FROM transactions AS tx
-//         JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
-//         JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
-//         WHERE tx.receiver_account_id = ? AND a.action_kind = 'FUNCTION_CALL' AND tx.block_timestamp > ?
-//         ORDER BY tx.block_timestamp ASC
-//     ",)
-//         .bind(&self.pool_address)
-//         .bind(from_block_timestamp as i64)
-//         .fetch_all(&self.pg)
-//         .await?;
-//
-//     let mut txs = Vec::new();
-//
-//     for rec in recs {
-//         if rec.args["method_name"] == "transact" {
-//             let args = rec.args["args_base64"]
-//                 .as_str()
-//                 .ok_or_else(|| anyhow::anyhow!("args_base64 is missing"))?;
-//             let calldata = base64::decode(args)?;
-//
-//             let tx = Tx {
-//                 hash: rec.transaction_hash,
-//                 block_hash: rec.included_in_block_hash,
-//                 block_height: rec.block_height.to_u64().unwrap(),
-//                 timestamp: rec.block_timestamp.to_u64().unwrap(),
-//                 sender_address: rec.signer_account_id,
-//                 receiver_address: rec.receiver_account_id,
-//                 signature: rec.signature,
-//                 calldata,
-//             };
-//
-//             txs.push(tx);
-//         }
-//     }
-//
-//     Ok(txs)
-// }
+// Using block timestamp instead of block height to avoid an extra join
+/// Used for pre-initializing the database.
+pub async fn fetch_transactions(
+    conn: &mut PgConnection,
+    pool_address: &str,
+    from_block: u64,
+) -> Result<Vec<Tx>> {
+    // let pg = PgPoolOptions::new()
+    //     .max_connections(1)
+    //     .connect(&config.near_indexer_url)
+    //     .await?;
+
+    // let connection = PgConnection::connect(indexer_url).await?;
+
+    #[derive(sqlx::FromRow)]
+    struct Record {
+        transaction_hash: String,
+        block_timestamp: BigDecimal,
+        included_in_block_hash: String,
+        signer_account_id: String,
+        receiver_account_id: String,
+        signature: String,
+        args: JsonValue,
+        block_height: BigDecimal,
+    }
+
+    let recs = loop {
+        let res = sqlx::query_as::<_, Record>("
+            SELECT tx.transaction_hash, tx.block_timestamp, tx.signer_account_id,
+                   tx.receiver_account_id, tx.signature, tx.included_in_block_hash,
+                   b.block_height,
+                   a.args
+            FROM transactions AS tx
+            JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
+            JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
+            WHERE tx.receiver_account_id = ? AND a.action_kind = 'FUNCTION_CALL' AND b.block_height > ?
+            ORDER BY tx.block_timestamp ASC
+        ",)
+            .bind(pool_address)
+            .bind(from_block as i64)
+            .fetch_all(&mut *conn)
+            .await;
+
+        match res {
+            Ok(recs) => break recs,
+            Err(e) => {
+                const RETRY_DELAY: Duration = Duration::from_secs(1);
+                tracing::warn!(
+                    "Failed to fetch transactions: {e}, retrying in {} sec",
+                    RETRY_DELAY.as_secs()
+                );
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+        }
+    };
+
+    let mut txs = Vec::new();
+
+    for rec in recs {
+        if let Some(method_name) = rec.args.get("method_name") {
+            if method_name.as_str() != Some("transact") {
+                continue;
+            }
+
+            let args = rec.args["args_base64"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("args_base64 is missing"))?;
+            let calldata = base64::decode(args)?;
+
+            let tx = Tx {
+                hash: rec.transaction_hash,
+                block_hash: rec.included_in_block_hash,
+                block_height: rec.block_height.to_u64().unwrap(),
+                timestamp: rec.block_timestamp.to_u64().unwrap(),
+                sender_address: rec.signer_account_id,
+                receiver_address: rec.receiver_account_id,
+                signature: rec.signature,
+                calldata,
+            };
+
+            txs.push(tx);
+        } else {
+            continue;
+        }
+    }
+
+    Ok(txs)
+}
