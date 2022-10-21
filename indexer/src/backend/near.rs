@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use near_indexer::{
     near_primitives::views::{ActionView, ExecutionStatusView},
@@ -15,8 +17,8 @@ pub const BACKEND_NAME: &str = "NEAR";
 pub struct Config {
     pub contract_address: String,
     pub chain_id: String,
-    pub indexer_url: String,
     pub indexer_start_height: Option<u64>,
+    pub config_dir: Option<PathBuf>,
 }
 
 pub async fn start(
@@ -26,8 +28,11 @@ pub async fn start(
 ) -> Result<()> {
     tracing::info!("Starting indexer");
 
-    let mut home_dir = std::env::current_dir()?;
-    home_dir.push(".near");
+    let home_dir = backend_config.config_dir.unwrap_or_else(|| {
+        let mut dir = std::env::current_dir().unwrap();
+        dir.push(".near");
+        dir
+    });
 
     let init_config = InitConfigArgs {
         chain_id: Some(backend_config.chain_id.clone()),
