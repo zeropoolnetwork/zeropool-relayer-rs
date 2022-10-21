@@ -11,12 +11,14 @@ use tokio::sync::mpsc;
 use crate::{Deserialize, Tx};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
+const DEFAULT_REQUEST_INTERVAL_MS: u64 = 3000;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub contract_address: String,
     pub indexer_pg_url: String,
     pub indexer_start_height: Option<u64>,
+    pub indexer_request_interval: Option<u64>,
 }
 
 pub async fn start(
@@ -42,7 +44,11 @@ pub async fn start(
     };
 
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut interval = tokio::time::interval(Duration::from_millis(
+            backend_config
+                .indexer_request_interval
+                .unwrap_or(DEFAULT_REQUEST_INTERVAL_MS),
+        ));
         let mut last_block_height = starting_block_height
             .or(backend_config.indexer_start_height)
             .unwrap_or(0);
