@@ -26,6 +26,15 @@ pub enum TxPaginationQuery {
     BlockHeight { block_height: u64, limit: u64 },
 }
 
+impl Default for TxPaginationQuery {
+    fn default() -> Self {
+        Self::BlockHeight {
+            block_height: 0,
+            limit: 100,
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct InfoResponse {
     version: String,
@@ -41,7 +50,8 @@ async fn main() {
 
     tracing::info!("{config:#?}");
 
-    let storage = indexer::start_indexer(config.clone()).await.unwrap();
+    let (storage, indexer_worker, storage_worker) =
+        indexer::start_indexer(config.clone()).await.unwrap();
 
     let app = Router::new()
         .route("/transactions", get(get_transactions))
@@ -52,16 +62,26 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
 
     tracing::info!("Starting server on {addr}");
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let server = axum::Server::bind(&addr).serve(app.into_make_service());
+
+    tokio::select! {
+        res = server => {
+            tracing::error!("Server stopped: {:?}", res);
+        }
+        res = indexer_worker => {
+            tracing::error!("Indexer worker stopped: {:?}", res);
+        }
+        res = storage_worker => {
+            tracing::error!("Storage worker exited unexpectedly: {:?}", res);
+        }
+    }
 }
 
 async fn get_transactions(
     Extension(db): Extension<SharedDb>,
-    Query(pagination): Query<TxPaginationQuery>,
+    pagination: Option<Query<TxPaginationQuery>>,
 ) -> AppResult<Json<Vec<Tx>>> {
+    let Query(pagination) = pagination.unwrap_or_default();
     let txs = match pagination {
         TxPaginationQuery::Timestamp { timestamp, limit } => {
             db.get_txs_by_timestamp(timestamp, limit).await?

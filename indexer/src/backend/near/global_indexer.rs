@@ -65,6 +65,7 @@ pub async fn start(
             };
 
             for tx in txs {
+                tracing::debug!("Sending transaction {} to worker", tx.hash);
                 last_block_height = tx.block_height;
                 send.send(tx).await.unwrap_or_else(|err| {
                     tracing::error!("Failed to send transaction to storage: {}", err);
@@ -97,7 +98,6 @@ async fn fetch_transactions(
     }
 
     let recs = loop {
-        // TODO?: AND a.args->>'method_name' = 'transact'
         let res = sqlx::query_as::<_, Record>(
             "
             SELECT
@@ -116,6 +116,7 @@ async fn fetch_transactions(
                 tx.receiver_account_id = $1
                 AND a.action_kind = 'FUNCTION_CALL'
                 AND b.block_height > $2
+                AND a.args->>'method_name' = 'transact'
             ORDER BY tx.block_timestamp ASC
         ",
         )
@@ -140,31 +141,24 @@ async fn fetch_transactions(
 
     for rec in recs {
         tracing::trace!("Processing tx {}", rec.transaction_hash);
-        if let Some(method_name) = rec.args.get("method_name") {
-            if method_name.as_str() != Some("transact") {
-                continue;
-            }
 
-            let args = rec.args["args_base64"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("args_base64 is missing"))?;
-            let calldata = base64::decode(args)?;
+        let args = rec.args["args_base64"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("args_base64 is missing"))?;
+        let calldata = base64::decode(args)?;
 
-            let tx = Tx {
-                hash: rec.transaction_hash,
-                block_hash: rec.included_in_block_hash,
-                block_height: rec.block_height.to_u64().unwrap(),
-                timestamp: rec.block_timestamp.to_u64().unwrap(),
-                sender_address: rec.signer_account_id,
-                receiver_address: rec.receiver_account_id,
-                signature: rec.signature,
-                calldata,
-            };
+        let tx = Tx {
+            hash: rec.transaction_hash,
+            block_hash: rec.included_in_block_hash,
+            block_height: rec.block_height.to_u64().unwrap(),
+            timestamp: rec.block_timestamp.to_u64().unwrap(),
+            sender_address: rec.signer_account_id,
+            receiver_address: rec.receiver_account_id,
+            signature: rec.signature,
+            calldata,
+        };
 
-            txs.push(tx);
-        } else {
-            continue;
-        }
+        txs.push(tx);
     }
 
     Ok(txs)

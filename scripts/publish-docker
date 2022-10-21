@@ -3,7 +3,9 @@
 # TODO: Versioning
 
 USERNAME=voidxnull
-IMAGE=zeropool-indexer
+IMAGE=zeropool-$1-$2
 
-docker build -f ./docker/Dockerfile.indexer -t $USERNAME/$IMAGE:latest . && \
+echo $USERNAME/$IMAGE:latest
+
+docker build -f ./docker/Dockerfile.$1 -t $USERNAME/$IMAGE:latest . && \
 docker push $USERNAME/$IMAGE:latest

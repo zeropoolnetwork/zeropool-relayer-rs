@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::Deserialize;
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{postgres::PgPoolOptions, types::time::OffsetDateTime, PgPool};
 
 use crate::tx::Tx;
 
@@ -74,13 +74,16 @@ impl Storage {
 
     pub async fn store_tx(&self, tx: Tx) -> Result<()> {
         tracing::info!("Storing transaction {}", tx.hash);
+
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(tx.timestamp as i128)?;
+
         sqlx::query!(
             "INSERT INTO transactions (hash, block_hash, block_height, timestamp, sender_address, receiver_address, signature, calldata)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             tx.hash,
             tx.block_hash,
             tx.block_height as i64,
-            tx.timestamp as i64,
+            timestamp,
             tx.sender_address,
             tx.receiver_address,
             tx.signature,
@@ -88,33 +91,6 @@ impl Storage {
         )
         .execute(&self.pool)
         .await?;
-
-        Ok(())
-    }
-
-    // TODO: Batch insert
-    pub async fn store_txs(&self, txs: &[Tx]) -> Result<()> {
-        let mut pg_tx = self.pool.begin().await?;
-
-        for tx in txs {
-            tracing::info!("Storing transaction {}", tx.hash);
-            sqlx::query!(
-                "INSERT INTO transactions (hash, block_hash, block_height, timestamp, sender_address, receiver_address, signature, calldata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-                tx.hash,
-                tx.block_hash,
-                tx.block_height as i64,
-                tx.timestamp as i64,
-                tx.sender_address,
-                tx.receiver_address,
-                tx.signature,
-                tx.calldata,
-            )
-            .execute(&mut pg_tx)
-            .await?;
-        }
-
-        pg_tx.commit().await?;
 
         Ok(())
     }
