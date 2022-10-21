@@ -16,9 +16,8 @@ anyhow = "1.0.65"
 #near-jsonrpc-primitives = { version = "0.15.0", optional = true }
 #near-primitives = { version = "0.15.0", optional = true }
 near-indexer = { git = "https://github.com/near/nearcore", optional = true }
-#near-o11y = { git = "https://github.com/near/nearcore", rev = "267e36e39fb5bb29c1df23c73afbcaa750ce96b1", optional = true }
 sqlx = { version = "0.6.2", optional = true, features = ["postgres", "runtime-tokio-native-tls", "json", "bigdecimal", "time", "offline"] }
-#primitive-types = "0.10.1"
+
 num-traits = "0.2.15"
 borsh = "0.9.3"
 serde_json = "1.0.86"
@@ -29,7 +28,9 @@ envy = "0.4.2"
 serde_with = { version = "2.0.1", features = ["base64"] }
 
 [features]
-default = ["postgres_storage", "near"]
+default = ["postgres_storage", "near", "near-indexer-global"]
 evm = ["web3"]
-near = ["near-indexer"]
+near = []
 postgres_storage = ["sqlx"]
+near-indexer-global = []
+near-indexer-framework = ["near-indexer"]
