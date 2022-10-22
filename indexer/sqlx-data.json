@@ -60,6 +60,16 @@
     },
     "query": "SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 1"
   },
+  "22c676e82bd383e1e7c84e17ed25e7549543c9bdcaf445b4f266cb08111321de": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "CREATE INDEX IF NOT EXISTS transactions_block_height ON transactions (block_height)"
+  },
   "2abc053c6ca327c789a7c38eb2fa33f529ed5e3b97859c6d5063aa791a6a5de4": {
     "describe": {
       "columns": [],
@@ -242,25 +252,6 @@
       }
     },
     "query": "SELECT COUNT(*) FROM transactions"
-  },
-  "e61fc8c7303891155296078a9a4d0d7800e8dac973176b338452646b375bab4f": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Text",
-          "Text",
-          "Int8",
-          "Timestamptz",
-          "Text",
-          "Text",
-          "Text",
-          "Bytea"
-        ]
-      }
-    },
-    "query": "INSERT INTO transactions (hash, block_hash, block_height, timestamp, sender_address, receiver_address, signature, calldata)\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
   },
   "eeb3ff1899c6b732694314c9d6c8d9366292dc24be9b3bc5b1580ed67fa1d422": {
     "describe": {

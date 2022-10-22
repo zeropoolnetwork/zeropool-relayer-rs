@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
 use anyhow::Result;
 use num_traits::ToPrimitive;
@@ -118,8 +118,10 @@ async fn fetch_transactions(
             FROM transactions AS tx
                 JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
                 JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
+                JOIN execution_outcomes AS eo ON tx.converted_into_receipt_id = eo.receipt_id
             WHERE
                 tx.receiver_account_id = $1
+                AND eo.status != 'FAILURE'
                 AND a.action_kind = 'FUNCTION_CALL'
                 AND b.block_height > $2
                 AND a.args->>'method_name' = 'transact'

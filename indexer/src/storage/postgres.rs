@@ -27,8 +27,8 @@ impl Storage {
             .await?;
 
         // TODO: Implement migrations
-        // TODO: Store hashes in binary format
-        tracing::debug!("Creating/checking transactions table");
+        // TODO: Store hashes in binary format?
+        tracing::info!("Creating/checking transactions table");
         sqlx::query!(
             "CREATE TABLE IF NOT EXISTS transactions (
                 hash TEXT PRIMARY KEY,
@@ -44,9 +44,14 @@ impl Storage {
         .execute(&pool)
         .await?;
 
-        tracing::debug!("Creating/checking transactions table index");
+        tracing::info!("Creating/checking transactions table indices");
         sqlx::query!(
             "CREATE INDEX IF NOT EXISTS transactions_timestamp ON transactions (timestamp)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query!(
+            "CREATE INDEX IF NOT EXISTS transactions_block_height ON transactions (block_height)",
         )
         .execute(&pool)
         .await?;
