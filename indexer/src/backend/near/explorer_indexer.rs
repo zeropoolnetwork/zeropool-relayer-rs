@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use num_traits::ToPrimitive;
 use sqlx::{
     postgres::PgPoolOptions,
@@ -11,7 +11,6 @@ use tokio::sync::mpsc;
 
 use crate::{Deserialize, Tx};
 
-const RETRY_DELAY: Duration = Duration::from_secs(1);
 const DEFAULT_REQUEST_INTERVAL_MS: u64 = 3000;
 const ACQUIRE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60 * 10);
 
@@ -45,11 +44,49 @@ pub async fn start(
             .or(backend_config.indexer_start_height)
             .unwrap_or(0);
 
+        #[derive(FromRow)]
+        struct Timestamp {
+            block_timestamp: BigDecimal,
+        }
+
+        let mut last_block_timestamp = sqlx::query_as::<_, Timestamp>(
+            "
+        SELECT transactions.block_timestamp
+        FROM transactions
+            JOIN blocks ON transactions.included_in_block_hash = blocks.block_hash
+        WHERE blocks.block_height = $1
+        LIMIT 1
+        ",
+        )
+        .bind(last_block_height as i64)
+        .fetch_one(&pg)
+        .await?
+        .block_timestamp;
+
+        tracing::debug!("Last block timestamp fetched: {}", &last_block_timestamp);
+
         tracing::info!("Listening for new transactions");
         loop {
             interval.tick().await;
 
-            tracing::debug!("Checking for new transactions");
+            tracing::info!("Checking for new transactions");
+            let new_transactions_result = new_transactions_exist(
+                &pg,
+                &backend_config.contract_address,
+                last_block_timestamp.clone(),
+            )
+            .await;
+            match new_transactions_result {
+                Ok(latest_timestamp) => {
+                    last_block_timestamp = latest_timestamp;
+                }
+                Err(err) => {
+                    tracing::debug!("No new transactions: {}", err);
+                    continue;
+                }
+            }
+
+            tracing::info!("New potential transactions found, attempting to fetch them");
             let res =
                 fetch_transactions(&pg, &backend_config.contract_address, last_block_height).await;
 
@@ -64,15 +101,45 @@ pub async fn start(
             for tx in txs {
                 tracing::debug!("Sending transaction {} to worker", tx.hash);
                 last_block_height = tx.block_height;
-                send.send(tx).await.unwrap_or_else(|err| {
-                    tracing::error!("Failed to send transaction to storage: {}", err);
-                });
+                last_block_timestamp = BigDecimal::from(tx.timestamp);
+                send.send(tx).await?;
             }
         }
+
+        #[allow(unreachable_code)]
+        Ok::<(), Error>(())
     })
-    .await?;
+    .await??;
 
     Ok(())
+}
+
+async fn new_transactions_exist(
+    pg: &PgPool,
+    contract_address: &str,
+    from_block_timestamp: BigDecimal,
+) -> Result<BigDecimal> {
+    // Check with a simpler query
+    #[derive(FromRow)]
+    struct QueryResult {
+        block_timestamp: BigDecimal,
+    }
+
+    let res = sqlx::query_as::<_, QueryResult>(
+        "
+        SELECT block_timestamp
+        FROM transactions
+        WHERE receiver_account_id = $1 AND block_timestamp > $2
+        ORDER BY block_timestamp DESC
+        LIMIT 1
+        ",
+    )
+    .bind(contract_address)
+    .bind(from_block_timestamp)
+    .fetch_one(pg)
+    .await?;
+
+    Ok(res.block_timestamp)
 }
 
 // Using block timestamp instead of block height to avoid an extra join
@@ -92,34 +159,6 @@ async fn fetch_transactions(
         signature: String,
         args: JsonValue,
         block_height: BigDecimal,
-    }
-
-    // Check with a simpler query
-    #[derive(FromRow)]
-    struct Count {
-        count: i64,
-    }
-
-    let res = sqlx::query_as::<_, Count>(
-        "
-        SELECT count(*)
-        FROM transactions as tx
-            JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
-        WHERE
-            tx.receiver_account_id = $1
-            AND b.block_height > $2
-        ",
-    )
-    .bind(contract_address)
-    .bind(from_block as i64)
-    .fetch_one(conn)
-    .await?;
-
-    if res.count == 0 {
-        tracing::trace!("No new transactions");
-        return Ok(vec![]);
-    } else {
-        tracing::debug!("Found {} potential transactions", res.count);
     }
 
     // If the query is successful, continue with the more complex one

@@ -108,7 +108,7 @@ async fn get_transaction(
 
 async fn info(Extension(db): Extension<SharedDb>) -> AppResult<Json<InfoResponse>> {
     Ok(Json(InfoResponse {
-        version: "0.1.0".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
         num_transactions: db.count().await?,
     }))
 }
