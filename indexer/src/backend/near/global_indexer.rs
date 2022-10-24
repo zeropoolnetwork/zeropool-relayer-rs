@@ -3,8 +3,9 @@ use std::time::Duration;
 use anyhow::Result;
 use num_traits::ToPrimitive;
 use sqlx::{
+    postgres::PgPoolOptions,
     types::{BigDecimal, JsonValue},
-    Connection, PgConnection,
+    FromRow, PgPool,
 };
 use tokio::sync::mpsc;
 
@@ -12,6 +13,7 @@ use crate::{Deserialize, Tx};
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 const DEFAULT_REQUEST_INTERVAL_MS: u64 = 3000;
+const ACQUIRE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60 * 10);
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -26,22 +28,12 @@ pub async fn start(
     starting_block_height: Option<u64>,
     send: mpsc::Sender<Tx>,
 ) -> Result<()> {
-    tracing::info!("Starting indexer");
-
-    let mut pg = loop {
-        match PgConnection::connect(&backend_config.indexer_pg_url).await {
-            Ok(pool) => break pool,
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to connect to {}: {}, retrying in {} sec",
-                    &backend_config.indexer_pg_url,
-                    e,
-                    RETRY_DELAY.as_secs()
-                );
-                tokio::time::sleep(RETRY_DELAY).await;
-            }
-        }
-    };
+    tracing::info!("Initializing NEAR Indexer for Explorer connection pool");
+    let pg = PgPoolOptions::new()
+        .acquire_timeout(ACQUIRE_CONNECTION_TIMEOUT)
+        .max_connections(1)
+        .connect(&backend_config.indexer_pg_url)
+        .await?;
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(
@@ -59,8 +51,7 @@ pub async fn start(
 
             tracing::debug!("Checking for new transactions");
             let res =
-                fetch_transactions(&mut pg, &backend_config.contract_address, last_block_height)
-                    .await;
+                fetch_transactions(&pg, &backend_config.contract_address, last_block_height).await;
 
             let txs = match res {
                 Ok(txs) => txs,
@@ -87,7 +78,7 @@ pub async fn start(
 // Using block timestamp instead of block height to avoid an extra join
 /// Used for pre-initializing the database.
 async fn fetch_transactions(
-    conn: &mut PgConnection,
+    conn: &PgPool,
     contract_address: &str,
     from_block: u64,
 ) -> Result<Vec<Tx>> {
@@ -103,47 +94,63 @@ async fn fetch_transactions(
         block_height: BigDecimal,
     }
 
-    let recs = loop {
-        let res = sqlx::query_as::<_, Record>(
-            "
-            SELECT
-                tx.transaction_hash,
-                tx.block_timestamp,
-                tx.signer_account_id,
-                tx.receiver_account_id,
-                tx.signature,
-                tx.included_in_block_hash,
-                b.block_height,
-                a.args
-            FROM transactions AS tx
-                JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
-                JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
-                JOIN execution_outcomes AS eo ON tx.converted_into_receipt_id = eo.receipt_id
-            WHERE
-                tx.receiver_account_id = $1
-                AND eo.status != 'FAILURE'
-                AND a.action_kind = 'FUNCTION_CALL'
-                AND b.block_height > $2
-                AND a.args->>'method_name' = 'transact'
-            ORDER BY tx.block_timestamp ASC
-        ",
-        )
-        .bind(contract_address)
-        .bind(from_block as i64)
-        .fetch_all(&mut *conn)
-        .await;
+    // Check with a simpler query
+    #[derive(FromRow)]
+    struct Count {
+        count: i64,
+    }
 
-        match res {
-            Ok(recs) => break recs,
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to fetch transactions: {e}, retrying in {} sec",
-                    RETRY_DELAY.as_secs()
-                );
-                tokio::time::sleep(RETRY_DELAY).await;
-            }
-        }
-    };
+    let res = sqlx::query_as::<_, Count>(
+        "
+        SELECT count(*)
+        FROM transactions as tx
+            JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
+        WHERE
+            tx.receiver_account_id = $1
+            AND b.block_height > $2
+        ",
+    )
+    .bind(contract_address)
+    .bind(from_block as i64)
+    .fetch_one(conn)
+    .await?;
+
+    if res.count == 0 {
+        tracing::trace!("No new transactions");
+        return Ok(vec![]);
+    } else {
+        tracing::debug!("Found {} potential transactions", res.count);
+    }
+
+    // If the query is successful, continue with the more complex one
+    let recs = sqlx::query_as::<_, Record>(
+        "
+        SELECT
+            tx.transaction_hash,
+            tx.block_timestamp,
+            tx.signer_account_id,
+            tx.receiver_account_id,
+            tx.signature,
+            tx.included_in_block_hash,
+            b.block_height,
+            a.args
+        FROM transactions AS tx
+            JOIN transaction_actions AS a ON tx.transaction_hash = a.transaction_hash
+            JOIN blocks AS b ON tx.included_in_block_hash = b.block_hash
+            JOIN execution_outcomes AS eo ON tx.converted_into_receipt_id = eo.receipt_id
+        WHERE
+            tx.receiver_account_id = $1
+            AND eo.status != 'FAILURE'
+            AND a.action_kind = 'FUNCTION_CALL'
+            AND b.block_height > $2
+            AND a.args->>'method_name' = 'transact'
+        ORDER BY tx.block_timestamp ASC
+    ",
+    )
+    .bind(contract_address)
+    .bind(from_block as i64)
+    .fetch_all(conn)
+    .await?;
 
     let mut txs = Vec::new();
 
