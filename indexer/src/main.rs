@@ -19,27 +19,7 @@ mod tx;
 
 type SharedDb = Arc<Storage>;
 
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum TxPaginationQuery {
-    Timestamp { timestamp: u64, limit: u64 },
-    BlockHeight { block_height: u64, limit: u64 },
-}
-
-impl Default for TxPaginationQuery {
-    fn default() -> Self {
-        Self::BlockHeight {
-            block_height: 0,
-            limit: 100,
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct InfoResponse {
-    version: String,
-    num_transactions: u64,
-}
+const MAX_TX_LIMIT: u64 = 100;
 
 // TODO: Split into two separate services: indexer and api
 #[tokio::main]
@@ -77,20 +57,25 @@ async fn main() {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TxPaginationQuery {
+    block_height: Option<u64>,
+    timestamp: Option<u64>,
+    limit: Option<u64>,
+}
+
 async fn get_transactions(
     Extension(db): Extension<SharedDb>,
-    pagination: Option<Query<TxPaginationQuery>>,
+    Query(p): Query<TxPaginationQuery>,
 ) -> AppResult<Json<Vec<Tx>>> {
-    let Query(pagination) = pagination.unwrap_or_default();
-    let txs = match pagination {
-        TxPaginationQuery::Timestamp { timestamp, limit } => {
-            db.get_txs_by_timestamp(timestamp, limit).await?
-        }
-        TxPaginationQuery::BlockHeight {
-            block_height,
-            limit,
-        } => db.get_txs_by_block_height(block_height, limit).await?,
-    };
+    let block_height = p.block_height.unwrap_or_default();
+    let timestamp = p.timestamp.unwrap_or_default();
+    let limit = p
+        .limit
+        .map(|l| l.clamp(0, MAX_TX_LIMIT))
+        .unwrap_or(MAX_TX_LIMIT);
+
+    let txs = db.get_txs(block_height, timestamp, limit).await?;
 
     Ok(Json(txs))
 }
@@ -104,6 +89,12 @@ async fn get_transaction(
         Some(tx) => Ok(Json(tx)),
         None => Err(AppError::NotFound),
     }
+}
+
+#[derive(Serialize)]
+struct InfoResponse {
+    version: String,
+    num_transactions: u64,
 }
 
 async fn info(Extension(db): Extension<SharedDb>) -> AppResult<Json<InfoResponse>> {

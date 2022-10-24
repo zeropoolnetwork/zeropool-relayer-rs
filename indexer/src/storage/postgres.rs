@@ -100,44 +100,23 @@ impl Storage {
         Ok(())
     }
 
-    pub async fn get_txs_by_timestamp(&self, from_timestamp: u64, limit: u64) -> Result<Vec<Tx>> {
-        let txs = sqlx::query!(
-            "SELECT * FROM transactions
-            WHERE timestamp >= $1
-            ORDER BY timestamp ASC
-            LIMIT $2",
-            from_timestamp as i64,
-            limit as i64,
-        )
-        .fetch_all(&self.pool)
-        .await?
-        .into_iter()
-        .map(|rec| Tx {
-            hash: rec.hash,
-            block_hash: rec.block_hash,
-            block_height: rec.block_height as u64,
-            timestamp: rec.timestamp.unix_timestamp_nanos() as u64,
-            sender_address: rec.sender_address,
-            receiver_address: rec.receiver_address,
-            signature: rec.signature,
-            calldata: rec.calldata,
-        })
-        .collect();
-
-        Ok(txs)
-    }
-
-    pub async fn get_txs_by_block_height(
+    pub async fn get_txs(
         &self,
         from_block_height: u64,
+        from_timestamp: u64,
         limit: u64,
     ) -> Result<Vec<Tx>> {
+        let timestamp = OffsetDateTime::from_unix_timestamp_nanos(from_timestamp as i128)?;
+
         let txs = sqlx::query!(
             "SELECT * FROM transactions
-            WHERE block_height >= $1
-            ORDER BY timestamp ASC
-            LIMIT $2",
+            WHERE
+                block_height >= $1
+                AND timestamp >= $2
+            ORDER BY block_height ASC
+            LIMIT $3",
             from_block_height as i64,
+            timestamp,
             limit as i64,
         )
         .fetch_all(&self.pool)
