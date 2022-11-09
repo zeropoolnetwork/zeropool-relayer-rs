@@ -5,6 +5,10 @@
 USERNAME=voidxnull
 IMAGE=zeropool-$1-$2
 
+cd indexer && \
+cargo sqlx prepare && \
+cd -
+
 echo $USERNAME/$IMAGE:latest
 
 docker build -f ./docker/Dockerfile.$1 -t $USERNAME/$IMAGE:latest . && \

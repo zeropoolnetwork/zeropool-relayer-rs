@@ -99,132 +99,6 @@
     },
     "query": "INSERT INTO transactions (hash, block_hash, block_height, timestamp, sender_address, receiver_address, signature, calldata)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
   },
-  "8a7a65b47388ba13c60edf2f918cb886686f8d1e2838fd942332aa289f15df4b": {
-    "describe": {
-      "columns": [
-        {
-          "name": "hash",
-          "ordinal": 0,
-          "type_info": "Text"
-        },
-        {
-          "name": "block_hash",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "block_height",
-          "ordinal": 2,
-          "type_info": "Int8"
-        },
-        {
-          "name": "timestamp",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "sender_address",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "receiver_address",
-          "ordinal": 5,
-          "type_info": "Text"
-        },
-        {
-          "name": "signature",
-          "ordinal": 6,
-          "type_info": "Text"
-        },
-        {
-          "name": "calldata",
-          "ordinal": 7,
-          "type_info": "Bytea"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Timestamptz",
-          "Int8"
-        ]
-      }
-    },
-    "query": "SELECT * FROM transactions\n            WHERE timestamp >= $1\n            ORDER BY timestamp ASC\n            LIMIT $2"
-  },
-  "8d70b2c8d003ed8eb730ed8ca412c01fd21e64533c8ab87a06fa5c40f456c8ef": {
-    "describe": {
-      "columns": [
-        {
-          "name": "hash",
-          "ordinal": 0,
-          "type_info": "Text"
-        },
-        {
-          "name": "block_hash",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "block_height",
-          "ordinal": 2,
-          "type_info": "Int8"
-        },
-        {
-          "name": "timestamp",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "sender_address",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "receiver_address",
-          "ordinal": 5,
-          "type_info": "Text"
-        },
-        {
-          "name": "signature",
-          "ordinal": 6,
-          "type_info": "Text"
-        },
-        {
-          "name": "calldata",
-          "ordinal": 7,
-          "type_info": "Bytea"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Int8",
-          "Int8"
-        ]
-      }
-    },
-    "query": "SELECT * FROM transactions\n            WHERE block_height >= $1\n            ORDER BY timestamp ASC\n            LIMIT $2"
-  },
   "9994a4d79e4010b5a90bf9095734024387a471c3a1eed341b6ab339484939234": {
     "describe": {
       "columns": [],
@@ -314,5 +188,69 @@
       }
     },
     "query": "SELECT * FROM transactions WHERE hash = $1"
+  },
+  "ff03d92359e3e98cb7f93cf5c2c9519554039757a2892c118c07c4489db07781": {
+    "describe": {
+      "columns": [
+        {
+          "name": "hash",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "block_hash",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "block_height",
+          "ordinal": 2,
+          "type_info": "Int8"
+        },
+        {
+          "name": "timestamp",
+          "ordinal": 3,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "sender_address",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "receiver_address",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "signature",
+          "ordinal": 6,
+          "type_info": "Text"
+        },
+        {
+          "name": "calldata",
+          "ordinal": 7,
+          "type_info": "Bytea"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8",
+          "Timestamptz",
+          "Int8"
+        ]
+      }
+    },
+    "query": "SELECT * FROM transactions\n            WHERE\n                block_height >= $1\n                AND timestamp >= $2\n            ORDER BY block_height ASC\n            LIMIT $3"
   }
 }
