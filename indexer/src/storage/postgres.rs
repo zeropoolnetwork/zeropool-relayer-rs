@@ -12,6 +12,8 @@ pub const STORAGE_NAME: &str = "PG";
 pub struct Config {
     url: String,
     max_connections: u32,
+    #[serde(default)]
+    reset: bool,
 }
 
 pub struct Storage {
@@ -55,6 +57,11 @@ impl Storage {
         )
         .execute(&pool)
         .await?;
+
+        if config.reset {
+            tracing::info!("Resetting transactions table");
+            sqlx::query!("TRUNCATE transactions").execute(&pool).await?;
+        }
 
         Ok(Self { pool })
     }
