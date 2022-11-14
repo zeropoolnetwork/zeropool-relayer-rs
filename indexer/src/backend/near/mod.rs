@@ -1,9 +1,9 @@
-#[cfg(feature = "near-indexer-global")]
+#[cfg(feature = "near-indexer-explorer")]
 mod explorer_indexer;
 #[cfg(feature = "near-indexer-framework")]
 mod indexer_framework;
 
-#[cfg(feature = "near-indexer-global")]
+#[cfg(feature = "near-indexer-explorer")]
 pub use self::explorer_indexer::*;
 #[cfg(feature = "near-indexer-framework")]
 pub use self::indexer_framework::*;
