@@ -1,7 +1,8 @@
 [workspace]
 members = [
-#    "relayer",
+    "relayer-server",
     "indexer",
+    "sparse-merkle-tree",
 ]
 default-members = [
     "indexer",
