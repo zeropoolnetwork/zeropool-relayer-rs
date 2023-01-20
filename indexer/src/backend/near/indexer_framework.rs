@@ -21,8 +21,6 @@ use crate::tx::Tx;
 pub struct Config {
     pub contract_address: String,
     pub chain_id: String,
-    pub indexer_pg_url: String,
-    pub indexer_start_height: Option<u64>,
     pub config_dir: Option<PathBuf>,
 }
 

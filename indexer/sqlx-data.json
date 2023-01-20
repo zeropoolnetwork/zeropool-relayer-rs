@@ -127,6 +127,16 @@
     },
     "query": "SELECT COUNT(*) FROM transactions"
   },
+  "d6734152feb1dffbfde58a2a9566a96dab2234daeed6ebd2f825c38e3d05e061": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "TRUNCATE transactions"
+  },
   "eeb3ff1899c6b732694314c9d6c8d9366292dc24be9b3bc5b1580ed67fa1d422": {
     "describe": {
       "columns": [
