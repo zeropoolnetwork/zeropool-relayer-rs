@@ -26,6 +26,7 @@ const MAX_TX_LIMIT: u64 = 100;
 async fn main() {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
+
     let config = config::Config::init();
 
     tracing::info!("{config:#?}");

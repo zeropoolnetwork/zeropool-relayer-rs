@@ -17,6 +17,8 @@ use tokio::sync::mpsc;
 
 use crate::tx::Tx;
 
+pub type BlockId = u64;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub contract_address: String,
@@ -26,7 +28,7 @@ pub struct Config {
 
 pub async fn start(
     backend_config: Config,
-    starting_block_height: Option<u64>,
+    starting_block_height: Option<BlockId>,
     send: mpsc::Sender<Tx>,
 ) -> Result<()> {
     tracing::info!("Starting indexer");

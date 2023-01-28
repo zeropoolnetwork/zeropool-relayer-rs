@@ -11,6 +11,8 @@ use tokio::sync::mpsc;
 
 use crate::{Deserialize, Tx};
 
+pub type BlockId = u64;
+
 const DEFAULT_REQUEST_INTERVAL_MS: u64 = 3000;
 const ACQUIRE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60 * 10);
 
@@ -18,13 +20,13 @@ const ACQUIRE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60 * 10);
 pub struct Config {
     pub contract_address: String,
     pub indexer_pg_url: String,
-    pub indexer_start_height: Option<u64>,
+    pub indexer_start_height: Option<BlockId>,
     pub indexer_request_interval: Option<u64>,
 }
 
 pub async fn start(
     backend_config: Config,
-    starting_block_height: Option<u64>,
+    starting_block_height: Option<BlockId>,
     send: mpsc::Sender<Tx>,
 ) -> Result<()> {
     tracing::info!("Initializing NEAR Indexer for Explorer connection pool");

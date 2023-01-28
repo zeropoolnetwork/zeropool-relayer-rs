@@ -2,8 +2,11 @@
 members = [
     "relayer-server",
     "indexer",
-    "sparse-merkle-tree",
 ]
 default-members = [
     "indexer",
 ]
+
+[workspace.package]
+authors = ["Dmitry Vdovin <voidxnull@gmail.com>"]
+edition = "2021"
