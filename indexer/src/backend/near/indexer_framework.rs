@@ -1,19 +1,10 @@
-use std::{path::PathBuf, time::Duration};
-
 use anyhow::Result;
 use near_indexer::{
     near_primitives::views::{ActionView, ExecutionStatusView},
     InitConfigArgs,
 };
-use num_traits::ToPrimitive;
 use serde::Deserialize;
-use sqlx::{
-    postgres::{PgConnection, PgPoolOptions},
-    types::{BigDecimal, JsonValue},
-    Connection,
-};
-// use sqlx::{postgres::PgPoolOptions, types::BigDecimal, PgPool};
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::tx::Tx;
 
@@ -23,51 +14,55 @@ pub type BlockId = u64;
 pub struct Config {
     pub contract_address: String,
     pub chain_id: String,
-    pub config_dir: Option<PathBuf>,
+    pub node_url: Option<String>,
+    pub block_height: BlockId,
 }
 
 pub async fn start(
     backend_config: Config,
     starting_block_height: Option<BlockId>,
     send: mpsc::Sender<Tx>,
-) -> Result<()> {
+) -> Result<JoinHandle<Result<()>>> {
     tracing::info!("Starting indexer");
 
-    let home_dir = backend_config.config_dir.unwrap_or_else(|| {
-        let mut dir = std::env::current_dir().unwrap();
-        dir.push(".near");
-        dir
-    });
+    let home_dir = near_indexer::get_default_home();
 
-    let init_config = InitConfigArgs {
-        chain_id: Some(backend_config.chain_id.clone()),
-        account_id: None,
-        test_seed: None,
-        num_shards: 0,
-        fast: false,
-        genesis: None,
-        download_genesis: true,
-        download_genesis_url: None,
-        download_config: true,
-        download_config_url: None,
-        boot_nodes: None,
-        max_gas_burnt_view: None,
-    };
+    let genesis_file = home_dir.join("genesis.json");
 
-    tracing::info!("Initializing near state");
-    let home_dir_clone = home_dir.clone();
-    tokio::task::spawn_blocking(move || {
-        if let Err(e) = near_indexer::indexer_init_configs(&home_dir_clone, init_config) {
-            tracing::warn!("{e}");
-        }
-    })
-    .await?;
-    tracing::info!("Near state initialized");
+    if !genesis_file.is_file() {
+        tracing::info!("genesis.json not found, initializing state");
 
-    let sync_mode = if let Some(starting_block_height) = starting_block_height {
-        near_indexer::SyncModeEnum::BlockHeight(starting_block_height)
+        let init_config = InitConfigArgs {
+            chain_id: Some(backend_config.chain_id.clone()),
+            account_id: None,
+            test_seed: None,
+            num_shards: 0,
+            fast: false,
+            genesis: None,
+            download_genesis: true,
+            download_genesis_url: None,
+            download_config: true,
+            download_config_url: None,
+            boot_nodes: backend_config.node_url,
+            max_gas_burnt_view: None,
+        };
+
+        let home_dir_clone = home_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = near_indexer::indexer_init_configs(&home_dir_clone, init_config) {
+                tracing::error!("Failed to initialize near state: {}", err);
+            }
+        })
+        .await?;
+
+        tracing::info!("Near state initialized");
+    }
+
+    // If there are any transactions in the database, we should start from the interruption.
+    let sync_mode = if starting_block_height.is_some() {
+        near_indexer::SyncModeEnum::FromInterruption
     } else {
-        near_indexer::SyncModeEnum::LatestSynced
+        near_indexer::SyncModeEnum::BlockHeight(backend_config.block_height)
     };
 
     let indexer_config = near_indexer::IndexerConfig {
@@ -79,16 +74,17 @@ pub async fn start(
     let indexer = near_indexer::Indexer::new(indexer_config)?;
     let stream = indexer.streamer();
 
-    tokio::spawn(listen_blocks(stream, backend_config.contract_address, send));
+    tracing::debug!("Spawning indexer task");
+    let handle = tokio::spawn(listen_blocks(stream, backend_config.contract_address, send));
 
-    Ok(())
+    Ok(handle)
 }
 
 async fn listen_blocks(
     mut stream: mpsc::Receiver<near_indexer::StreamerMessage>,
     contract_address: String,
     send: mpsc::Sender<Tx>,
-) {
+) -> Result<()> {
     tracing::info!("Listening for blocks");
     while let Some(message) = stream.recv().await {
         tracing::debug!("New block at {:?}", message.block.header.height);
@@ -134,13 +130,13 @@ async fn listen_blocks(
                                 calldata: args,
                             };
 
-                            send.send(tx)
-                                .await
-                                .expect("Failed to send tx to the channel");
+                            send.send(tx).await?;
                         }
                     }
                 }
             }
         }
     }
+
+    Ok(())
 }

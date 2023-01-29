@@ -7,25 +7,30 @@ use near_lake_framework::{
     LakeConfigBuilder,
 };
 use serde::Deserialize;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::tx::Tx;
 
 pub type BlockId = u64;
 
+const LATEST_BLOCK_HEIGHT_FILE: &str = "near_latest_checked_block_height";
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub contract_address: String,
     pub chain_id: String,
+    /// Starting block height
     pub block_height: BlockId,
 }
 
 pub async fn start(
     config: Config,
-    starting_block_height: Option<BlockId>,
+    _starting_block_height: Option<BlockId>,
     send: mpsc::Sender<Tx>,
-) -> Result<()> {
-    let block_height = starting_block_height.unwrap_or(config.block_height);
+) -> Result<JoinHandle<Result<()>>> {
+    let block_height = read_latest_block_height()
+        .await
+        .unwrap_or(config.block_height);
     let mut lake_config = LakeConfigBuilder::default().start_block_height(block_height);
 
     match config.chain_id.as_str() {
@@ -36,13 +41,15 @@ pub async fn start(
 
     let (_, mut stream) = near_lake_framework::streamer(lake_config.build()?);
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         while let Some(streamer_message) = stream.recv().await {
             handle_streamer_message(streamer_message, &config.contract_address, send.clone()).await;
         }
+
+        Ok(())
     });
 
-    Ok(())
+    Ok(handle)
 }
 
 async fn handle_streamer_message(
@@ -51,6 +58,10 @@ async fn handle_streamer_message(
     send: mpsc::Sender<Tx>,
 ) {
     for shard in message.shards {
+        if let Err(err) = cache_latest_block_height(message.block.header.height).await {
+            tracing::warn!("Failed to cache latest block id: {}", err);
+        }
+
         if let Some(chunk) = shard.chunk {
             for t in chunk.transactions {
                 match t.outcome.execution_outcome.outcome.status {
@@ -98,4 +109,16 @@ async fn handle_streamer_message(
             }
         }
     }
+}
+
+async fn cache_latest_block_height(block_id: BlockId) -> Result<()> {
+    tokio::fs::write(LATEST_BLOCK_HEIGHT_FILE, block_id.to_string()).await?;
+
+    Ok(())
+}
+
+async fn read_latest_block_height() -> Result<BlockId> {
+    let latest_block_id = tokio::fs::read_to_string(LATEST_BLOCK_HEIGHT_FILE).await?;
+
+    Ok(latest_block_id.parse()?)
 }

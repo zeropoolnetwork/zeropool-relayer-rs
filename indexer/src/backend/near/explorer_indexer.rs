@@ -7,7 +7,7 @@ use sqlx::{
     types::{BigDecimal, JsonValue},
     FromRow, PgPool,
 };
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{Deserialize, Tx};
 
@@ -20,15 +20,15 @@ const ACQUIRE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60 * 10);
 pub struct Config {
     pub contract_address: String,
     pub indexer_pg_url: String,
-    pub indexer_start_height: Option<BlockId>,
-    pub indexer_request_interval: Option<u64>,
+    pub block_height: Option<BlockId>,
+    pub request_interval: Option<u64>,
 }
 
 pub async fn start(
     backend_config: Config,
     starting_block_height: Option<BlockId>,
     send: mpsc::Sender<Tx>,
-) -> Result<()> {
+) -> Result<JoinHandle<Result<()>>> {
     tracing::info!("Initializing NEAR Indexer for Explorer connection pool");
     let pg = PgPoolOptions::new()
         .acquire_timeout(ACQUIRE_CONNECTION_TIMEOUT)
@@ -36,14 +36,14 @@ pub async fn start(
         .connect(&backend_config.indexer_pg_url)
         .await?;
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(
             backend_config
-                .indexer_request_interval
+                .request_interval
                 .unwrap_or(DEFAULT_REQUEST_INTERVAL_MS),
         ));
         let mut last_block_height = starting_block_height
-            .or(backend_config.indexer_start_height)
+            .or(backend_config.block_height)
             .unwrap_or(0);
 
         #[derive(FromRow)]
@@ -110,10 +110,9 @@ pub async fn start(
 
         #[allow(unreachable_code)]
         Ok::<(), Error>(())
-    })
-    .await??;
+    });
 
-    Ok(())
+    Ok(handle)
 }
 
 async fn new_transactions_exist(

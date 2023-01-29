@@ -17,8 +17,7 @@ pub async fn start_indexer(
     let from_block_id = storage.latest_tx().await?.map(|tx| block_id(&tx));
     let (send, mut recv) = mpsc::channel(100);
 
-    let indexer_worker =
-        tokio::spawn(async move { start(config.backend, from_block_id, send).await });
+    let indexer_worker = start(config.backend, from_block_id, send).await?;
 
     let db = storage.clone();
     let storage_worker = tokio::spawn(async move {

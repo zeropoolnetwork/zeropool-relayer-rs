@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "relayer-server",
+#    "relayer-server",
     "indexer",
 ]
 default-members = [

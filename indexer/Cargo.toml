@@ -15,6 +15,7 @@ anyhow = "1.0.65"
 near-indexer = { git = "https://github.com/near/nearcore", optional = true }
 sqlx = { version = "0.6.2", optional = true, features = ["postgres", "runtime-tokio-native-tls", "json", "bigdecimal", "time", "offline"] }
 near-lake-framework = { version = "0.6.1", optional = true }
+actix = { version = "0.13.0", optional = true }
 
 num-traits = "0.2.15"
 borsh = "0.9.3"
@@ -27,10 +28,11 @@ serde_with = { version = "2.0.1", features = ["base64"] }
 reqwest = "0.11.13"
 
 [features]
-default = ["postgres_storage", "near", "near-lake-framework"]
+default = ["postgres_storage", "near", "near-indexer-framework"]
 evm = ["dep:web3"]
 near = []
 postgres_storage = ["dep:sqlx"]
 near-indexer-explorer = []
-near-indexer-framework = ["dep:near-indexer"]
+near-indexer-framework = ["dep:near-indexer", "dep:actix"]
 near-lake-framework = ["dep:near-lake-framework"]
+

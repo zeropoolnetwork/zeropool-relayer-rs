@@ -8215,6 +8215,7 @@ dependencies = [
 name = "zeropool-indexer"
 version = "0.1.0"
 dependencies = [
+ "actix",
  "anyhow",
  "axum",
  "base64 0.13.0",
