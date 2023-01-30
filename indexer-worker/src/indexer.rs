@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::{sync::mpsc, task::JoinHandle};
+use zeropool_indexer_tx_storage::Storage;
 
 use crate::{
     backend::{block_id, start},
     config::Config,
-    storage::Storage,
 };
 
 pub async fn start_indexer(

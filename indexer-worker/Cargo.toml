@@ -1,0 +1,35 @@
+[package]
+name = "zeropool-indexer-worker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zeropool-indexer-tx-storage = { path = "../indexer-tx-storage" }
+
+tokio = { version = "1", features = ["full"] }
+envconfig = "0.10.0"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
+syn = { version = "1.0.102", features = ["full"] }
+anyhow = "1.0.65"
+num-traits = "0.2.15"
+base64 = "0.21.0"
+dotenv = "0.15.0"
+serde = "1.0.145"
+envy = "0.4.2"
+
+# Backend-specific dependencies
+web3 = { version = "0.18.0", optional = true }
+near-indexer = { git = "https://github.com/near/nearcore", optional = true }
+near-lake-framework = { version = "0.6.1", optional = true }
+actix = { version = "0.13.0", optional = true }
+sqlx = { version = "0.6.2", optional = true, features = ["postgres", "runtime-tokio-native-tls", "json", "bigdecimal", "time", "offline"] }
+
+[features]
+default = []
+evm = ["dep:web3"]
+near = []
+near-indexer-explorer = ["dep:sqlx"]
+near-indexer-framework = ["dep:near-indexer", "dep:actix"]
+near-lake-framework = ["dep:near-lake-framework"]
+

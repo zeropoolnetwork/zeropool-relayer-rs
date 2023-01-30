@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use anyhow::{Error, Result};
 use num_traits::ToPrimitive;
+use serde::Deserialize;
 use sqlx::{
     postgres::PgPoolOptions,
     types::{BigDecimal, JsonValue},
     FromRow, PgPool,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
-
-use crate::{Deserialize, Tx};
+use zeropool_indexer_tx_storage::Tx;
 
 pub type BlockId = u64;
 

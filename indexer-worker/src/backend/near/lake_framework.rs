@@ -8,8 +8,7 @@ use near_lake_framework::{
 };
 use serde::Deserialize;
 use tokio::{sync::mpsc, task::JoinHandle};
-
-use crate::tx::Tx;
+use zeropool_indexer_tx_storage::Tx;
 
 pub type BlockId = u64;
 

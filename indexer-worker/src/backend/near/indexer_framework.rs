@@ -5,8 +5,7 @@ use near_indexer::{
 };
 use serde::Deserialize;
 use tokio::{sync::mpsc, task::JoinHandle};
-
-use crate::tx::Tx;
+use zeropool_indexer_tx_storage::Tx;
 
 pub type BlockId = u64;
 

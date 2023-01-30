@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use anyhow::Result;
 use axum::{
     extract::{Extension, Path, Query},
     http::StatusCode,
@@ -8,43 +9,45 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::{storage::Storage, tx::Tx};
-
-mod backend;
-mod config;
-mod indexer;
-mod storage;
-mod tx;
+use zeropool_indexer_tx_storage::{Storage, Tx, STORAGE_NAME};
 
 type SharedDb = Arc<Storage>;
 
 const MAX_TX_LIMIT: u64 = 100;
 
-// TODO: Split into two separate services: indexer and api
+#[derive(Debug, Clone)]
+pub struct Config {
+    port: u16,
+    storage: zeropool_indexer_tx_storage::Config,
+}
 
-#[cfg(not(feature = "near-indexer-framework"))]
+impl Config {
+    pub fn init() -> Self {
+        Config {
+            port: std::env::var("PORT")
+                .ok()
+                .and_then(|port| port.parse().ok())
+                .unwrap_or(3000),
+            storage: envy::prefixed(format!("{}_", STORAGE_NAME))
+                .from_env()
+                .unwrap(),
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    start().await;
+    start().await.unwrap();
 }
 
-#[cfg(feature = "near-indexer-framework")]
-#[actix::main]
-async fn main() {
-    start().await;
-}
-
-async fn start() {
+async fn start() -> Result<()> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let config = config::Config::init();
-
+    let config = Config::init();
     tracing::info!("{config:#?}");
 
-    let (storage, indexer_worker, storage_worker) =
-        indexer::start_indexer(config.clone()).await.unwrap();
+    let storage = Arc::new(Storage::open(config.storage).await?);
 
     let app = Router::new()
         .route("/transactions", get(get_transactions))
@@ -52,22 +55,13 @@ async fn start() {
         .route("/info", get(info))
         .layer(Extension(storage));
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
 
     tracing::info!("Starting server on {addr}");
     let server = axum::Server::bind(&addr).serve(app.into_make_service());
+    server.await?;
 
-    tokio::select! {
-        res = server => {
-            tracing::error!("Server stopped: {:?}", res);
-        }
-        res = indexer_worker => {
-            tracing::error!("Indexer worker stopped: {:?}", res);
-        }
-        res = storage_worker => {
-            tracing::error!("Storage worker exited unexpectedly: {:?}", res);
-        }
-    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]

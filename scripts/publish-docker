@@ -3,13 +3,32 @@
 # TODO: Versioning
 
 USERNAME=voidxnull
-IMAGE=zeropool-$1-$2
 
-cd indexer && \
-cargo sqlx prepare && \
-cd -
 
-echo $USERNAME/$IMAGE:latest
+#cd indexer-tx-storage && \
+#cargo sqlx prepare && \
+#cd - || exit
 
-docker build -f ./docker/Dockerfile.$1 -t $USERNAME/$IMAGE:latest . && \
-docker push $USERNAME/$IMAGE:latest
+# $1 = package
+# $2 = suffix
+# $3 = features
+function build_and_push() {
+  local IMAGE=zeropool-$1
+  if [ -n "$2" ]; then
+      IMAGE=$IMAGE-$2
+  fi
+  local BINARY_NAME=zeropool-$1
+  local BINARY_MASK=${BINARY_NAME//-/_}
+
+  echo "Building $USERNAME/$IMAGE:latest"
+
+  docker build -f ./docker/Dockerfile -t $USERNAME/$IMAGE:latest \
+    --build-arg PACKAGE="$1" \
+    --build-arg BINARY_MASK="$BINARY_MASK" \
+    --build-arg FEATURES="$3" \
+    . && \
+  docker push $USERNAME/$IMAGE:latest
+}
+
+#build_and_push indexer-api
+build_and_push indexer-worker near-framework "near,near-indexer-framework"

@@ -1,23 +1,16 @@
-use serde::Deserialize;
+use zeropool_indexer_tx_storage::STORAGE_NAME;
 
-use crate::{backend::BACKEND_NAME, storage::STORAGE_NAME};
+use crate::backend::BACKEND_NAME;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub server: ServerConfig,
     pub backend: crate::backend::Config,
-    pub storage: crate::storage::Config,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct ServerConfig {
-    pub port: u16,
+    pub storage: zeropool_indexer_tx_storage::Config,
 }
 
 impl Config {
     pub fn init() -> Self {
         Config {
-            server: envy::from_env().unwrap(),
             backend: envy::prefixed(format!("{}_", BACKEND_NAME))
                 .from_env()
                 .unwrap(),
