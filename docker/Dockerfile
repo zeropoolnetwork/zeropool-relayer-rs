@@ -1,17 +1,10 @@
 # General purpose Dockerfile for indexer and relayer services
 
-
-
 FROM rust:latest as build
 ARG PACKAGE
-ARG BINARY_MASK
 ARG FEATURES=""
-
 ENV PACKAGE=$PACKAGE
-ENV BINARY_MASK=$BINARY_MASK
 ENV FEATURES=$FEATURES
-
-RUN echo "Building $PACKAGE with features $FEATURES (binary mask: $BINARY_MASK))"
 
 RUN apt-get update && apt-get install -y clang
 
@@ -25,14 +18,15 @@ RUN cargo build --release --features "$FEATURES"
 
 # Build
 RUN rm src/*.rs
-RUN rm ./target/release/deps/$BINARY_MASK*
+ENV BINARY_NAME=zeropool-$PACKAGE
+RUN /bin/bash -c 'rm ./target/release/deps/"${BINARY_NAME//-/_}"*'
 COPY ./$PACKAGE/src ./src
 RUN cargo build --release --features "$FEATURES"
 
 # Final image
 FROM rust:latest
 ARG PACKAGE
-
-COPY --from=build /zeropool-$PACKAGE/target/release/zeropool-$PACKAGE .
 ENV BINARY_NAME=zeropool-$PACKAGE
+
+COPY --from=build /zeropool-$PACKAGE/target/release/$BINARY_NAME .
 CMD /$BINARY_NAME
