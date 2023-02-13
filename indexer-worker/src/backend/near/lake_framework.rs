@@ -10,7 +10,7 @@ use serde::Deserialize;
 use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Tx;
 
-pub type BlockId = u64;
+use crate::backend::{Backend, BackendMethods};
 
 const LATEST_BLOCK_HEIGHT_FILE: &str = "near_latest_checked_block_height";
 
@@ -19,36 +19,56 @@ pub struct Config {
     pub contract_address: String,
     pub chain_id: String,
     /// Starting block height
-    pub block_height: BlockId,
+    pub block_height: u64,
 }
 
-pub async fn start(
+pub struct NearLakeFrameworkBackend {
     config: Config,
-    _starting_block_height: Option<BlockId>,
-    send: mpsc::Sender<Tx>,
-) -> Result<JoinHandle<Result<()>>> {
-    let block_height = read_latest_block_height()
-        .await
-        .unwrap_or(config.block_height);
-    let mut lake_config = LakeConfigBuilder::default().start_block_height(block_height);
+    // latest_tx_block_id: Option<u64>,
+}
 
-    match config.chain_id.as_str() {
-        "mainnet" => lake_config = lake_config.mainnet(),
-        "testnet" => lake_config = lake_config.testnet(),
-        _ => bail!("Unsupported chain id: {}", config.chain_id),
-    };
+impl Backend for NearLakeFrameworkBackend {
+    type Config = Config;
 
-    let (_, mut stream) = near_lake_framework::streamer(lake_config.build()?);
+    fn new(backend_config: Self::Config, _latest_tx: Option<Tx>) -> Result<Self> {
+        Ok(Self {
+            config: backend_config,
+            // latest_tx_block_id: latest_tx.map(|tx| tx.block_height),
+        })
+    }
+}
 
-    let handle = tokio::spawn(async move {
-        while let Some(streamer_message) = stream.recv().await {
-            handle_streamer_message(streamer_message, &config.contract_address, send.clone()).await;
-        }
+#[async_trait::async_trait]
+impl BackendMethods for NearLakeFrameworkBackend {
+    async fn start(self, send: mpsc::Sender<Tx>) -> Result<JoinHandle<Result<()>>> {
+        let block_height = read_latest_block_height()
+            .await
+            .unwrap_or(self.config.block_height);
+        let mut lake_config = LakeConfigBuilder::default().start_block_height(block_height);
 
-        Ok(())
-    });
+        match self.config.chain_id.as_str() {
+            "mainnet" => lake_config = lake_config.mainnet(),
+            "testnet" => lake_config = lake_config.testnet(),
+            _ => bail!("Unsupported chain id: {}", self.config.chain_id),
+        };
 
-    Ok(handle)
+        let (_, mut stream) = near_lake_framework::streamer(lake_config.build()?);
+
+        let handle = tokio::spawn(async move {
+            while let Some(streamer_message) = stream.recv().await {
+                handle_streamer_message(
+                    streamer_message,
+                    &self.config.contract_address,
+                    send.clone(),
+                )
+                .await;
+            }
+
+            Ok(())
+        });
+
+        Ok(handle)
+    }
 }
 
 async fn handle_streamer_message(
@@ -110,13 +130,13 @@ async fn handle_streamer_message(
     }
 }
 
-async fn cache_latest_block_height(block_id: BlockId) -> Result<()> {
+async fn cache_latest_block_height(block_id: u64) -> Result<()> {
     tokio::fs::write(LATEST_BLOCK_HEIGHT_FILE, block_id.to_string()).await?;
 
     Ok(())
 }
 
-async fn read_latest_block_height() -> Result<BlockId> {
+async fn read_latest_block_height() -> Result<u64> {
     let latest_block_id = tokio::fs::read_to_string(LATEST_BLOCK_HEIGHT_FILE).await?;
 
     Ok(latest_block_id.parse()?)

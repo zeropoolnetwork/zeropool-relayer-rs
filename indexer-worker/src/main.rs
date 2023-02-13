@@ -20,7 +20,7 @@ async fn start() {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let config = config::Config::init();
+    let config = config::Config::init().unwrap();
 
     tracing::info!("{config:#?}");
 

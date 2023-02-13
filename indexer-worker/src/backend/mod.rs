@@ -1,12 +1,19 @@
+use anyhow::Result;
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use zeropool_indexer_tx_storage::Tx;
+
 #[cfg(feature = "evm")]
 pub mod evm;
 #[cfg(feature = "near")]
 pub mod near;
 
-#[cfg(feature = "evm")]
-pub use evm::*;
-#[cfg(feature = "near")]
-pub use near::*;
+pub trait Backend: Sized + BackendMethods {
+    type Config;
 
-// TODO: Create a Backend trait and bundle all backends in a single binary (?)
-//    Need async method in traits for that though.
+    fn new(backend_config: Self::Config, latest_tx: Option<Tx>) -> Result<Self>;
+}
+
+#[async_trait::async_trait]
+pub trait BackendMethods {
+    async fn start(self, send: Sender<Tx>) -> Result<JoinHandle<Result<()>>>;
+}

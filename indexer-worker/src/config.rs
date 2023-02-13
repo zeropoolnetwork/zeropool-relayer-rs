@@ -1,22 +1,48 @@
+use anyhow::Result;
+use serde::de::DeserializeOwned;
 use zeropool_indexer_tx_storage::STORAGE_NAME;
 
-use crate::backend::BACKEND_NAME;
+#[derive(Debug, Clone)]
+pub enum BackendKind {
+    #[cfg(feature = "evm")]
+    Evm(crate::backend::evm::Config),
+    #[cfg(all(feature = "near", feature = "near-indexer-explorer"))]
+    NearIndexerExplorer(crate::backend::near::explorer_indexer::Config),
+    #[cfg(all(feature = "near", feature = "near-indexer-framework"))]
+    NearIndexerFramework(crate::backend::near::indexer_framework::Config),
+    #[cfg(all(feature = "near", feature = "near-lake-framework"))]
+    NearLakeFramework(crate::backend::near::lake_framework::Config),
+}
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub backend: crate::backend::Config,
+    pub backend: BackendKind,
     pub storage: zeropool_indexer_tx_storage::Config,
 }
 
 impl Config {
-    pub fn init() -> Self {
-        Config {
-            backend: envy::prefixed(format!("{}_", BACKEND_NAME))
-                .from_env()
-                .unwrap(),
-            storage: envy::prefixed(format!("{}_", STORAGE_NAME))
-                .from_env()
-                .unwrap(),
-        }
+    pub fn init() -> Result<Self> {
+        let backend_name = std::env::var("BACKEND_NAME")?;
+
+        let backend = match backend_name.as_str() {
+            #[cfg(feature = "evm")]
+            "evm" => BackendKind::Evm(prefixed_config("EVM")?),
+            #[cfg(all(feature = "near", feature = "near-indexer-explorer"))]
+            "near-indexer-explorer" => BackendKind::NearIndexerExplorer(prefixed_config("NEAR")?),
+            #[cfg(all(feature = "near", feature = "near-indexer-framework"))]
+            "near-indexer-framework" => BackendKind::NearIndexerFramework(prefixed_config("NEAR")?),
+            #[cfg(all(feature = "near", feature = "near-lake-framework"))]
+            "near-lake-framework" => BackendKind::NearLakeFramework(prefixed_config("NEAR")?),
+            _ => panic!("Unknown backend: {backend_name}"),
+        };
+
+        Ok(Config {
+            backend,
+            storage: prefixed_config(STORAGE_NAME)?,
+        })
     }
+}
+
+fn prefixed_config<T: DeserializeOwned>(prefix: &str) -> Result<T> {
+    Ok(envy::prefixed(format!("{prefix}_")).from_env()?)
 }

@@ -10,8 +10,9 @@ use sqlx::{
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Tx;
+use crate::backend::{Backend, BackendMethods};
 
-pub type BlockId = u64;
+type BlockId = u64;
 
 const DEFAULT_REQUEST_INTERVAL_MS: u64 = 3000;
 const ACQUIRE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(60 * 10);
@@ -24,95 +25,110 @@ pub struct Config {
     pub request_interval: Option<u64>,
 }
 
-pub async fn start(
-    backend_config: Config,
-    starting_block_height: Option<BlockId>,
-    send: mpsc::Sender<Tx>,
-) -> Result<JoinHandle<Result<()>>> {
-    tracing::info!("Initializing NEAR Indexer for Explorer connection pool");
-    let pg = PgPoolOptions::new()
-        .acquire_timeout(ACQUIRE_CONNECTION_TIMEOUT)
-        .max_connections(1)
-        .connect(&backend_config.indexer_pg_url)
-        .await?;
+pub struct NearExplorerBackend {
+    config: Config,
+    latest_tx_block_id: Option<u64>,
+}
 
-    let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(
-            backend_config
-                .request_interval
-                .unwrap_or(DEFAULT_REQUEST_INTERVAL_MS),
-        ));
-        let mut last_block_height = starting_block_height
-            .or(backend_config.block_height)
-            .unwrap_or(0);
+impl Backend for NearExplorerBackend {
+    type Config = Config;
 
-        #[derive(FromRow)]
-        struct Timestamp {
-            block_timestamp: BigDecimal,
-        }
+    fn new(backend_config: Self::Config, latest_tx: Option<Tx>) -> Result<Self> {
+        Ok(Self {
+            config: backend_config,
+            latest_tx_block_id: latest_tx.map(|tx| tx.block_height),
+        })
+    }
+}
 
-        let mut last_block_timestamp = sqlx::query_as::<_, Timestamp>(
-            "
+#[async_trait::async_trait]
+impl BackendMethods for NearExplorerBackend {
+    async fn start(self, send: mpsc::Sender<Tx>) -> Result<JoinHandle<Result<()>>> {
+        tracing::info!("Initializing NEAR Indexer for Explorer connection pool");
+        let pg = PgPoolOptions::new()
+            .acquire_timeout(ACQUIRE_CONNECTION_TIMEOUT)
+            .max_connections(1)
+            .connect(&self.config.indexer_pg_url)
+            .await?;
+
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(
+                self.config
+                    .request_interval
+                    .unwrap_or(DEFAULT_REQUEST_INTERVAL_MS),
+            ));
+            let mut last_block_height = self.latest_tx_block_id
+                .or(self.config.block_height)
+                .unwrap_or(0);
+
+            #[derive(FromRow)]
+            struct Timestamp {
+                block_timestamp: BigDecimal,
+            }
+
+            let mut last_block_timestamp = sqlx::query_as::<_, Timestamp>(
+                "
         SELECT transactions.block_timestamp
         FROM transactions
             JOIN blocks ON transactions.included_in_block_hash = blocks.block_hash
         WHERE blocks.block_height = $1
         LIMIT 1
         ",
-        )
-        .bind(last_block_height as i64)
-        .fetch_one(&pg)
-        .await?
-        .block_timestamp;
-
-        tracing::debug!("Last block timestamp fetched: {}", &last_block_timestamp);
-
-        tracing::info!("Listening for new transactions");
-        loop {
-            interval.tick().await;
-
-            tracing::info!("Checking for new transactions");
-            let new_transactions_result = new_transactions_exist(
-                &pg,
-                &backend_config.contract_address,
-                last_block_timestamp.clone(),
             )
-            .await;
-            match new_transactions_result {
-                Ok(latest_timestamp) => {
-                    last_block_timestamp = latest_timestamp;
+                .bind(last_block_height as i64)
+                .fetch_one(&pg)
+                .await?
+                .block_timestamp;
+
+            tracing::debug!("Last block timestamp fetched: {}", &last_block_timestamp);
+
+            tracing::info!("Listening for new transactions");
+            loop {
+                interval.tick().await;
+
+                tracing::info!("Checking for new transactions");
+                let new_transactions_result = new_transactions_exist(
+                    &pg,
+                    &self.config.contract_address,
+                    last_block_timestamp.clone(),
+                )
+                    .await;
+                match new_transactions_result {
+                    Ok(latest_timestamp) => {
+                        last_block_timestamp = latest_timestamp;
+                    }
+                    Err(err) => {
+                        tracing::debug!("No new transactions: {}", err);
+                        continue;
+                    }
                 }
-                Err(err) => {
-                    tracing::debug!("No new transactions: {}", err);
-                    continue;
+
+                tracing::info!("New potential transactions found, attempting to fetch them");
+                let res =
+                    fetch_transactions(&pg, &self.config.contract_address, last_block_height).await;
+
+                let txs = match res {
+                    Ok(txs) => txs,
+                    Err(e) => {
+                        tracing::error!("Failed to fetch transactions: {}", e);
+                        continue;
+                    }
+                };
+
+                for tx in txs {
+                    tracing::debug!("Sending transaction {} to worker", tx.hash);
+                    last_block_height = tx.block_height;
+                    last_block_timestamp = BigDecimal::from(tx.timestamp);
+                    send.send(tx).await?;
                 }
             }
 
-            tracing::info!("New potential transactions found, attempting to fetch them");
-            let res =
-                fetch_transactions(&pg, &backend_config.contract_address, last_block_height).await;
+            #[allow(unreachable_code)]
+            Ok::<(), Error>(())
+        });
 
-            let txs = match res {
-                Ok(txs) => txs,
-                Err(e) => {
-                    tracing::error!("Failed to fetch transactions: {}", e);
-                    continue;
-                }
-            };
-
-            for tx in txs {
-                tracing::debug!("Sending transaction {} to worker", tx.hash);
-                last_block_height = tx.block_height;
-                last_block_timestamp = BigDecimal::from(tx.timestamp);
-                send.send(tx).await?;
-            }
-        }
-
-        #[allow(unreachable_code)]
-        Ok::<(), Error>(())
-    });
-
-    Ok(handle)
+        Ok(handle)
+    }
 }
 
 async fn new_transactions_exist(

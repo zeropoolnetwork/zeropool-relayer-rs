@@ -5,8 +5,8 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Storage;
 
 use crate::{
-    backend::{block_id, start},
-    config::Config,
+    backend::{self, Backend, BackendMethods},
+    config::{BackendKind, Config},
 };
 
 pub async fn start_indexer(
@@ -14,10 +14,38 @@ pub async fn start_indexer(
 ) -> Result<(Arc<Storage>, JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
     let storage = Arc::new(Storage::open(config.storage).await?);
 
-    let from_block_id = storage.latest_tx().await?.map(|tx| block_id(&tx));
+    let latest_tx = storage.latest_tx().await?;
     let (send, mut recv) = mpsc::channel(100);
 
-    let indexer_worker = start(config.backend, from_block_id, send).await?;
+    let indexer_worker = match config.backend {
+        #[cfg(feature = "evm")]
+        BackendKind::Evm(evm_config) => {
+            backend::evm::EvmBackend::new(evm_config, latest_tx)?
+                .start(send)
+                .await?
+        }
+        #[cfg(any(feature = "near", feature = "near-lake-framework"))]
+        BackendKind::NearLakeFramework(near_config) => {
+            backend::near::lake_framework::NearLakeFrameworkBackend::new(near_config, latest_tx)?
+                .start(send)
+                .await?
+        }
+        #[cfg(any(feature = "near", feature = "near-indexer-explorer"))]
+        BackendKind::NearIndexerExplorer(near_config) => {
+            backend::near::explorer_indexer::NearExplorerBackend::new(near_config, latest_tx)?
+                .start(send)
+                .await?
+        }
+        #[cfg(any(feature = "near", feature = "near-indexer-framework"))]
+        BackendKind::NearIndexerFramework(near_config) => {
+            backend::near::indexer_framework::NearIndexerFrameworkBackend::new(
+                near_config,
+                latest_tx,
+            )?
+            .start(send)
+            .await?
+        }
+    };
 
     let db = storage.clone();
     let storage_worker = tokio::spawn(async move {

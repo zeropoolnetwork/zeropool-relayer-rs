@@ -28,7 +28,7 @@ impl Config {
                 .ok()
                 .and_then(|port| port.parse().ok())
                 .unwrap_or(3000),
-            storage: envy::prefixed(format!("{}_", STORAGE_NAME))
+            storage: envy::prefixed(format!("{STORAGE_NAME}_"))
                 .from_env()
                 .unwrap(),
         }

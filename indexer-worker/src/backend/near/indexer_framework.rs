@@ -6,8 +6,9 @@ use near_indexer::{
 use serde::Deserialize;
 use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Tx;
+use crate::backend::{Backend, BackendMethods};
 
-pub type BlockId = u64;
+type BlockId = u64;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -17,66 +18,81 @@ pub struct Config {
     pub block_height: BlockId,
 }
 
-pub async fn start(
-    backend_config: Config,
-    starting_block_height: Option<BlockId>,
-    send: mpsc::Sender<Tx>,
-) -> Result<JoinHandle<Result<()>>> {
-    tracing::info!("Starting indexer");
+pub struct NearIndexerFrameworkBackend {
+    config: Config,
+    latest_tx_block_id: Option<u64>,
+}
 
-    let home_dir = near_indexer::get_default_home();
+impl Backend for NearIndexerFrameworkBackend {
+    type Config = Config;
 
-    let genesis_file = home_dir.join("genesis.json");
+    fn new(backend_config: Self::Config, latest_tx: Option<Tx>) -> Result<Self> {
+        Ok(Self {
+            config: backend_config,
+            latest_tx_block_id: latest_tx.map(|tx| tx.block_height),
+        })
+    }
+}
 
-    if !genesis_file.is_file() {
-        tracing::info!("genesis.json not found, initializing state");
+#[async_trait::async_trait]
+impl BackendMethods for NearIndexerFrameworkBackend {
+    async fn start(self, send: mpsc::Sender<Tx>) -> Result<JoinHandle<Result<()>>> {
+        tracing::info!("Starting indexer");
 
-        let init_config = InitConfigArgs {
-            chain_id: Some(backend_config.chain_id.clone()),
-            account_id: None,
-            test_seed: None,
-            num_shards: 0,
-            fast: false,
-            genesis: None,
-            download_genesis: true,
-            download_genesis_url: None,
-            download_config: true,
-            download_config_url: None,
-            boot_nodes: backend_config.node_url,
-            max_gas_burnt_view: None,
+        let home_dir = near_indexer::get_default_home();
+
+        let genesis_file = home_dir.join("genesis.json");
+
+        if !genesis_file.is_file() {
+            tracing::info!("genesis.json not found, initializing state");
+
+            let init_config = InitConfigArgs {
+                chain_id: Some(self.config.chain_id.clone()),
+                account_id: None,
+                test_seed: None,
+                num_shards: 0,
+                fast: false,
+                genesis: None,
+                download_genesis: true,
+                download_genesis_url: None,
+                download_config: true,
+                download_config_url: None,
+                boot_nodes: self.config.node_url,
+                max_gas_burnt_view: None,
+            };
+
+            let home_dir_clone = home_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                if let Err(err) = near_indexer::indexer_init_configs(&home_dir_clone, init_config) {
+                    tracing::error!("Failed to initialize near state: {}", err);
+                }
+            })
+                .await?;
+
+            tracing::info!("Near state initialized");
+        }
+
+        // If there are any transactions in the database, we should start from the interruption.
+        let sync_mode = if self.latest_tx_block_id.is_some() {
+            near_indexer::SyncModeEnum::FromInterruption
+        } else {
+            near_indexer::SyncModeEnum::BlockHeight(self.config.block_height)
         };
 
-        let home_dir_clone = home_dir.clone();
-        tokio::task::spawn_blocking(move || {
-            if let Err(err) = near_indexer::indexer_init_configs(&home_dir_clone, init_config) {
-                tracing::error!("Failed to initialize near state: {}", err);
-            }
-        })
-        .await?;
+        let indexer_config = near_indexer::IndexerConfig {
+            home_dir: home_dir.clone(),
+            sync_mode,
+            await_for_node_synced: near_indexer::AwaitForNodeSyncedEnum::WaitForFullSync,
+        };
 
-        tracing::info!("Near state initialized");
+        let indexer = near_indexer::Indexer::new(indexer_config)?;
+        let stream = indexer.streamer();
+
+        tracing::debug!("Spawning indexer task");
+        let handle = tokio::spawn(listen_blocks(stream, self.config.contract_address, send));
+
+        Ok(handle)
     }
-
-    // If there are any transactions in the database, we should start from the interruption.
-    let sync_mode = if starting_block_height.is_some() {
-        near_indexer::SyncModeEnum::FromInterruption
-    } else {
-        near_indexer::SyncModeEnum::BlockHeight(backend_config.block_height)
-    };
-
-    let indexer_config = near_indexer::IndexerConfig {
-        home_dir: home_dir.clone(),
-        sync_mode,
-        await_for_node_synced: near_indexer::AwaitForNodeSyncedEnum::WaitForFullSync,
-    };
-
-    let indexer = near_indexer::Indexer::new(indexer_config)?;
-    let stream = indexer.streamer();
-
-    tracing::debug!("Spawning indexer task");
-    let handle = tokio::spawn(listen_blocks(stream, backend_config.contract_address, send));
-
-    Ok(handle)
 }
 
 async fn listen_blocks(
