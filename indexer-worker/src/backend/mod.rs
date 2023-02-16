@@ -4,7 +4,11 @@ use zeropool_indexer_tx_storage::Tx;
 
 #[cfg(feature = "evm")]
 pub mod evm;
-#[cfg(feature = "near")]
+#[cfg(any(
+    feature = "near-lake-framework",
+    feature = "near-indexer-framework",
+    feature = "near-indexer-explorer"
+))]
 pub mod near;
 
 pub trait Backend: Sized + BackendMethods {

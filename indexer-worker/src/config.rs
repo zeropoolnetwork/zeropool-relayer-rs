@@ -6,11 +6,11 @@ use zeropool_indexer_tx_storage::STORAGE_NAME;
 pub enum BackendKind {
     #[cfg(feature = "evm")]
     Evm(crate::backend::evm::Config),
-    #[cfg(all(feature = "near", feature = "near-indexer-explorer"))]
+    #[cfg(feature = "near-indexer-explorer")]
     NearIndexerExplorer(crate::backend::near::explorer_indexer::Config),
-    #[cfg(all(feature = "near", feature = "near-indexer-framework"))]
+    #[cfg(feature = "near-indexer-framework")]
     NearIndexerFramework(crate::backend::near::indexer_framework::Config),
-    #[cfg(all(feature = "near", feature = "near-lake-framework"))]
+    #[cfg(feature = "near-lake-framework")]
     NearLakeFramework(crate::backend::near::lake_framework::Config),
 }
 
@@ -22,7 +22,7 @@ pub struct Config {
 
 impl Config {
     pub fn init() -> Result<Self> {
-        let backend_name = std::env::var("BACKEND_NAME")?;
+        let backend_name = std::env::var("BACKEND")?;
 
         let backend = match backend_name.as_str() {
             #[cfg(feature = "evm")]

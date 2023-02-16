@@ -29,9 +29,8 @@ hex = "0.4.3"
 async-trait = "0.1.64"
 
 [features]
-default = ["evm", "near", "near-lake-framework", "near-indexer-explorer", "near-indexer-framework"]
+default = ["evm", "near-lake-framework", "near-indexer-explorer", "near-indexer-framework"]
 evm = ["dep:web3"]
-near = []
 near-indexer-explorer = ["dep:sqlx"]
 near-indexer-framework = ["dep:near-indexer", "dep:actix"]
 near-lake-framework = ["dep:near-lake-framework"]
