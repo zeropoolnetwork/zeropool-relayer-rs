@@ -1,6 +1,6 @@
 [workspace]
 members = [
-#    "relayer-server",
+    "relayer-server",
     "indexer-tx-storage",
     "indexer-worker",
     "indexer-api",
