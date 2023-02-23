@@ -27,11 +27,11 @@ impl Config {
         let backend = match backend_name.as_str() {
             #[cfg(feature = "evm")]
             "evm" => BackendKind::Evm(prefixed_config("EVM")?),
-            #[cfg(all(feature = "near", feature = "near-indexer-explorer"))]
+            #[cfg(feature = "near-indexer-explorer")]
             "near-indexer-explorer" => BackendKind::NearIndexerExplorer(prefixed_config("NEAR")?),
-            #[cfg(all(feature = "near", feature = "near-indexer-framework"))]
+            #[cfg(feature = "near-indexer-framework")]
             "near-indexer-framework" => BackendKind::NearIndexerFramework(prefixed_config("NEAR")?),
-            #[cfg(all(feature = "near", feature = "near-lake-framework"))]
+            #[cfg(feature = "near-lake-framework")]
             "near-lake-framework" => BackendKind::NearLakeFramework(prefixed_config("NEAR")?),
             _ => panic!("Unknown backend: {backend_name}"),
         };

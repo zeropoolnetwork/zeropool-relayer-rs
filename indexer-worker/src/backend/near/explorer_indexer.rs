@@ -10,6 +10,7 @@ use sqlx::{
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Tx;
+
 use crate::backend::{Backend, BackendMethods};
 
 type BlockId = u64;
@@ -57,7 +58,8 @@ impl BackendMethods for NearExplorerBackend {
                     .request_interval
                     .unwrap_or(DEFAULT_REQUEST_INTERVAL_MS),
             ));
-            let mut last_block_height = self.latest_tx_block_id
+            let mut last_block_height = self
+                .latest_tx_block_id
                 .or(self.config.block_height)
                 .unwrap_or(0);
 
@@ -75,10 +77,10 @@ impl BackendMethods for NearExplorerBackend {
         LIMIT 1
         ",
             )
-                .bind(last_block_height as i64)
-                .fetch_one(&pg)
-                .await?
-                .block_timestamp;
+            .bind(last_block_height as i64)
+            .fetch_one(&pg)
+            .await?
+            .block_timestamp;
 
             tracing::debug!("Last block timestamp fetched: {}", &last_block_timestamp);
 
@@ -92,7 +94,7 @@ impl BackendMethods for NearExplorerBackend {
                     &self.config.contract_address,
                     last_block_timestamp.clone(),
                 )
-                    .await;
+                .await;
                 match new_transactions_result {
                     Ok(latest_timestamp) => {
                         last_block_timestamp = latest_timestamp;
@@ -211,12 +213,14 @@ async fn fetch_transactions(
     let mut txs = Vec::new();
 
     for rec in recs {
+        use base64::{engine::general_purpose, Engine as _};
+
         tracing::trace!("Processing tx {}", rec.transaction_hash);
 
         let args = rec.args["args_base64"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("args_base64 is missing"))?;
-        let calldata = base64::decode(args)?;
+        let calldata = general_purpose::STANDARD.decode(args)?;
 
         let tx = Tx {
             hash: rec.transaction_hash,

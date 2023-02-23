@@ -20,7 +20,7 @@ envy = "0.4.2"
 
 # Backend-specific dependencies
 web3 = { version = "0.18.0", optional = true }
-near-indexer = { git = "https://github.com/near/nearcore", optional = true }
+near-indexer = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
 near-lake-framework = { version = "0.6.1", optional = true }
 actix = { version = "0.13.0", optional = true }
 sqlx = { version = "0.6.2", optional = true, features = ["postgres", "runtime-tokio-native-tls", "json", "bigdecimal", "time", "offline"] }

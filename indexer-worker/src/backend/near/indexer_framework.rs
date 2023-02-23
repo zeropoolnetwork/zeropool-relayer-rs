@@ -6,6 +6,7 @@ use near_indexer::{
 use serde::Deserialize;
 use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Tx;
+
 use crate::backend::{Backend, BackendMethods};
 
 type BlockId = u64;
@@ -59,6 +60,7 @@ impl BackendMethods for NearIndexerFrameworkBackend {
                 download_config_url: None,
                 boot_nodes: self.config.node_url,
                 max_gas_burnt_view: None,
+                download_records_url: None,
             };
 
             let home_dir_clone = home_dir.clone();
@@ -67,7 +69,7 @@ impl BackendMethods for NearIndexerFrameworkBackend {
                     tracing::error!("Failed to initialize near state: {}", err);
                 }
             })
-                .await?;
+            .await?;
 
             tracing::info!("Near state initialized");
         }
@@ -83,6 +85,7 @@ impl BackendMethods for NearIndexerFrameworkBackend {
             home_dir: home_dir.clone(),
             sync_mode,
             await_for_node_synced: near_indexer::AwaitForNodeSyncedEnum::WaitForFullSync,
+            validate_genesis: true,
         };
 
         let indexer = near_indexer::Indexer::new(indexer_config)?;
