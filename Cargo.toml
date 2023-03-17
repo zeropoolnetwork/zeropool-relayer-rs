@@ -8,8 +8,15 @@ members = [
 default-members = [
     "indexer-worker",
     "indexer-api",
+    "relayer-server",
 ]
 
 [workspace.package]
 authors = ["Dmitry Vdovin <voidxnull@gmail.com>"]
 edition = "2021"
+
+[patch.crates-io]
+near-indexer = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
+near-o11y = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
+near-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
+near-indexer-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }

@@ -9,71 +9,69 @@ use crate::{Engine, Fr};
 
 #[derive(Debug, Clone, Copy, Serialize_repr, Deserialize_repr)]
 #[repr(u16)]
-enum TxType {
+pub enum TxType {
     Deposit = 0,
     Transfer = 1,
     Withdraw = 2,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
+pub struct ProofWithInputs {
+    pub proof: Proof<Engine>,
+    pub inputs: Vec<Num<Fr>>,
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxDataRequest {
     pub tx_type: TxType,
-    #[serde(with = "hex")]
-    pub proof: Vec<u8>,
+    pub proof: ProofWithInputs,
     #[serde(with = "hex")]
     pub memo: Vec<u8>,
     #[serde(with = "hex")]
     pub extra_data: Vec<u8>,
+    #[serde(default)]
+    pub sync: bool,
 }
 
-impl TxDataRequest {
-    pub fn parse(self) -> Result<RawTxData, TxValidationError::InvalidProof> {
-        let proof =
-            bincode::deserialize(&self.proof).map_err(|_| TxValidationError::InvalidProof)?;
-        Ok(RawTxData {
-            tx_type: self.tx_type,
-            proof,
-            memo: self.memo,
-            extra_data: self.extra_data,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, thiserror::Error)]
+#[serde(rename_all = "snake_case")]
 pub enum TxValidationError {
-    InvalidProof,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct RawTxData {
-    tx_type: TxType,
-    proof: Proof<Engine>,
-    memo: Vec<u8>,
-    extra_data: Vec<u8>,
+    #[error("Empty memo")]
+    EmptyMemo,
+    #[error("Invalid transfer proof")]
+    InvalidTransferProof,
+    #[error("Insufficient balance for deposit")]
+    InsufficientBalance,
+    #[error("Fee too low")]
+    FeeTooLow,
+    #[error("Invalid values")]
+    InvalidValues,
+    #[error("Invalid tx index")]
+    InvalidTxIndex,
 }
 
 /// Intermediate transaction data ready to be sent to the worker.
-#[derive(Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize)]
 pub struct ParsedTxData {
-    raw: RawTxData,
-    out_commit: Num<Fr>,
-    commit_index: Num<Fr>,
-    tx_hash: Num<Fr>,
-    tx_data: Vec<u8>,
-    nullifier: Num<Fr>,
+    pub tx_type: TxType,
+    pub proof: Proof<Engine>,
+    pub delta: Num<Fr>,
+    pub out_commit: Num<Fr>,
+    pub nullifier: Num<Fr>,
+    pub memo: Vec<u8>,
+    pub extra_data: Vec<u8>,
 }
 
-/// Full transaction data ready to be sent to be prepared and send to the blockchain.
-#[derive(Debug, Clone, Copy)]
+/// Full data needed to create a blockchain transaction.
 pub struct FullTxData {
-    raw: RawTxData,
-    root_after: Num<Fr>,
-    delta: Num<Fr>,
-    out_commit: Num<Fr>,
-    commit_index: Num<Fr>,
-    tx_hash: Num<Fr>,
-    tx_data: Vec<u8>,
-    nullifier: Num<Fr>,
-    tree_proof: Proof<Engine>,
+    pub tx_type: TxType,
+    pub proof: Proof<Engine>,
+    pub tree_proof: Proof<Engine>,
+    pub root_after: Num<Fr>,
+    pub delta: Num<Fr>,
+    pub out_commit: Num<Fr>,
+    pub nullifier: Num<Fr>,
+    pub memo: Vec<u8>,
+    pub extra_data: Vec<u8>,
 }

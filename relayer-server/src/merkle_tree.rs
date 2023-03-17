@@ -196,7 +196,6 @@ pub struct MerkleTree {
     nodes: Storage,
     /// For empty nodes with index >= length
     default_nodes: Vec<Hash>,
-    num_leaves: Index,
 }
 
 impl MerkleTree {
@@ -211,16 +210,13 @@ impl MerkleTree {
 
         let default_nodes = full_default_nodes[..=H].to_vec();
 
-        let num_leaves = nodes.get_num_leaves()?;
-
         Ok(Self {
             nodes,
             default_nodes,
-            num_leaves,
         })
     }
 
-    pub fn set_node(&mut self, depth: u64, index: u64, hash: Hash) -> Result<()> {
+    pub fn set_node(&self, depth: u64, index: u64, hash: Hash) -> Result<()> {
         let mut tx = self.nodes.begin()?;
 
         self.nodes.set_tx(&mut tx, depth, index, hash)?;
@@ -265,38 +261,23 @@ impl MerkleTree {
         Ok(())
     }
 
-    pub fn set_leaf(&mut self, index: Index, hash: Hash) -> Result<()> {
+    pub fn set_leaf(&self, index: Index, hash: Hash) -> Result<()> {
         self.set_node(H as Index, index, hash)?;
         self.nodes.set_num_leaves(index + 1)?;
-        self.num_leaves = index + 1;
 
         Ok(())
     }
 
-    pub fn add_leaf(&mut self, hash: Hash) -> Result<()> {
+    pub fn add_leaf(&self, hash: Hash) -> Result<()> {
         let index = self.nodes.get_num_leaves()?;
         self.set_node(H as Index, index, hash)?;
         self.nodes.set_num_leaves(index + 1)?;
-        self.num_leaves = index + 1;
 
         Ok(())
     }
 
-    // TODO: Optimize
     pub fn add_leaves_at<I: IntoIterator<Item = Hash>>(
-        &mut self,
-        index: Index,
-        leaves: I,
-    ) -> Result<()> {
-        for (i, hash) in leaves.into_iter().enumerate() {
-            self.set_leaf(index + i as Index, hash)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn add_leaves_at_optimized<I: IntoIterator<Item = Hash>>(
-        &mut self,
+        &self,
         index: Index,
         leaves: I,
     ) -> Result<()> {
@@ -351,9 +332,9 @@ impl MerkleTree {
             }
         }
 
-        let new_num_leaves = self.num_leaves + num_leaves;
+        let old_num_leaves = self.nodes.get_num_leaves()?;
+        let new_num_leaves = old_num_leaves + num_leaves;
         self.nodes.set_num_leaves_tx(&mut tx, new_num_leaves)?;
-        self.num_leaves = new_num_leaves;
 
         self.nodes.commit(tx)?;
 
@@ -361,22 +342,21 @@ impl MerkleTree {
     }
 
     /// Deletes all leaves from the tree with i >= index, recalculating the parents.
-    pub fn rollback(&mut self, index: Index) -> Result<()> {
+    pub fn rollback(&self, index: Index) -> Result<()> {
         if index == 0 {
             self.nodes.clear()?;
-            self.num_leaves = 0;
+            self.nodes.set_num_leaves(0)?;
             return Ok(());
         }
 
-        if index >= self.num_leaves {
+        let old_num_leaves = self.nodes.get_num_leaves()?;
+
+        if index >= old_num_leaves {
             bail!("Cannot rollback to a higher index than the latest leaf");
         }
 
         let mut tx = self.nodes.begin()?;
-
-        let old_num_leaves = self.num_leaves;
         self.nodes.set_num_leaves_tx(&mut tx, index)?;
-        self.num_leaves = index;
 
         self.nodes.delete_tx(&mut tx, H as Index, index)?;
 
@@ -427,7 +407,7 @@ impl MerkleTree {
         Ok(())
     }
 
-    pub fn remove_node(&mut self, depth: u64, index: u64) -> Result<()> {
+    pub fn remove_node(&self, depth: u64, index: u64) -> Result<()> {
         self.set_node(depth, index, self.default_nodes[depth as usize])
     }
 
@@ -438,6 +418,10 @@ impl MerkleTree {
             .unwrap_or_else(|| self.default_nodes[0]);
 
         Ok(root)
+    }
+
+    pub fn get_node(&self, depth: u64, index: u64) -> Result<Option<Hash>> {
+        self.nodes.get(depth, index)
     }
 
     pub fn merkle_proof(&self, index: Index) -> impl Iterator<Item = Result<Hash>> + '_ {
@@ -464,7 +448,7 @@ impl MerkleTree {
     }
 
     pub fn num_leaves(&self) -> Index {
-        self.num_leaves
+        self.nodes.get_num_leaves().unwrap()
     }
 }
 
@@ -535,7 +519,7 @@ mod tests {
     fn test_tree_add_leaves(hashes: &[&str], expected_root: &str) {
         let (_, mut tree) = tree();
 
-        tree.add_leaves_at_optimized(0, hashes.iter().map(|s| Hash::from_str(s).unwrap()))
+        tree.add_leaves_at(0, hashes.iter().map(|s| Hash::from_str(s).unwrap()))
             .unwrap();
 
         assert_eq!(tree.root().unwrap().to_string(), expected_root);
@@ -560,7 +544,7 @@ mod tests {
     fn test_tree_rollback_to(hashes: &[&str], rollback: u64, root: &str) {
         let (_, mut tree) = tree();
 
-        tree.add_leaves_at_optimized(0, hashes.iter().map(|s| Hash::from_str(s).unwrap()))
+        tree.add_leaves_at(0, hashes.iter().map(|s| Hash::from_str(s).unwrap()))
             .unwrap();
 
         tree.rollback(rollback).unwrap();

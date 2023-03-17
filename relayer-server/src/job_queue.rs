@@ -9,7 +9,8 @@ use uuid::Uuid;
 const JOBS_KEY: &str = "jobs";
 const STATUS_EXPIRE_SECONDS: usize = 60 * 60 * 24; // 24 hours
 
-// TODO: Proper job queue. Also, redis or rabbitmq? Redis is not used for anything else, so rabbitmq
+// TODO: Implement a proper job queue/explore limitations of this particular design.
+//       Also, redis or rabbitmq? Redis is not used for anything else, so rabbitmq
 //       might be better.
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,8 +24,8 @@ pub enum JobStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Job<D> {
-    id: Uuid,
-    data: D,
+    pub id: Uuid,
+    pub data: D,
 }
 
 pub struct JobQueue<D, C> {
@@ -125,6 +126,34 @@ where
 
         match status {
             Some(status) => Ok(Some(bincode::deserialize(&status)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn set_extra<E: Serialize>(&self, job_id: Uuid, extra: E) -> Result<()> {
+        let mut con = self.client.get_async_connection().await?;
+        let status: Option<Vec<u8>> = con.get(format!("job:{job_id}")).await?;
+
+        if status.is_none() {
+            anyhow::bail!("Job not found")
+        }
+
+        con.set_ex(
+            format!("job:{job_id}:extra"),
+            bincode::serialize(&extra)?,
+            STATUS_EXPIRE_SECONDS,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_extra<E: DeserializeOwned>(&self, job_id: Uuid) -> Result<Option<E>> {
+        let mut con = self.client.get_async_connection().await?;
+        let extra: Option<Vec<u8>> = con.get(format!("job:{job_id}:extra")).await?;
+
+        match extra {
+            Some(extra) => Ok(Some(bincode::deserialize(&extra)?)),
             None => Ok(None),
         }
     }

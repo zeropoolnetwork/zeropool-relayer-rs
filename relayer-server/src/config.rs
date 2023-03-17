@@ -13,11 +13,13 @@ pub enum BackendKind {
     Waves(crate::backend::waves::Config),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct Config {
     pub port: u16,
     pub backend: BackendKind,
     pub redis_url: String,
+    pub indexer_url: String,
+    pub fee: u64,
 }
 
 impl Config {
@@ -37,6 +39,8 @@ impl Config {
         Ok(Config {
             port: std::env::var("PORT")?.parse()?,
             redis_url: std::env::var("REDIS_URL")?,
+            indexer_url: std::env::var("INDEXER_URL")?,
+            fee: std::env::var("FEE")?.parse()?,
             backend,
         })
     }

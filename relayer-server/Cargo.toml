@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.6.2"
+axum = { version = "0.6.2", features = ["macros"] }
 serde = "1.0.145"
 sqlx = { version = "0.6.2", features = ["postgres", "runtime-tokio-native-tls", "json", "bigdecimal"] }
 tokio = { version = "1", features = ["full"] }
@@ -12,6 +12,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 serde_json = "1.0.85"
 libzeropool-rs = { version = "0.9.1", features = ["multicore", "native", "kvdb-persy"] }
+fawkes-crypto = { version = "4.2.4", features = ["serde_support"] }
 dotenv = "0.15.0"
 anyhow = "1.0.65"
 base64 = "0.21.0"
@@ -26,10 +27,15 @@ persy = "1.4.1"
 scopeguard = "1.1.0"
 itertools = "0.10.5"
 serde_repr = "0.1.10"
+zeropool-indexer-tx-storage = { path = "../indexer-tx-storage",  default-features = false }
 
 web3 = { version = "0.18.0", optional = true }
 waves-rust = { version = "0.2.2", optional = true }
 near-jsonrpc-client = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
+byteorder = "1"
+secp256k1 = "0.21.0"
+thiserror = "1.0.39"
+reqwest = "0.11.14"
 
 [features]
 default = ["evm_backend"]
