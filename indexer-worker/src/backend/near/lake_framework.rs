@@ -24,16 +24,16 @@ pub struct Config {
 
 pub struct NearLakeFrameworkBackend {
     config: Config,
-    // latest_tx_block_id: Option<u64>,
+    latest_tx_block_height: Option<u64>,
 }
 
 impl Backend for NearLakeFrameworkBackend {
     type Config = Config;
 
-    fn new(backend_config: Self::Config, _latest_tx: Option<Tx>) -> Result<Self> {
+    fn new(backend_config: Self::Config, latest_tx: Option<Tx>) -> Result<Self> {
         Ok(Self {
             config: backend_config,
-            // latest_tx_block_id: latest_tx.map(|tx| tx.block_height),
+            latest_tx_block_height: latest_tx.map(|tx| tx.block_height),
         })
     }
 }
@@ -43,7 +43,11 @@ impl BackendMethods for NearLakeFrameworkBackend {
     async fn start(self, send: mpsc::Sender<Tx>) -> Result<JoinHandle<Result<()>>> {
         let block_height = read_latest_block_height()
             .await
-            .unwrap_or(self.config.block_height);
+            .unwrap_or(self.config.block_height)
+            .max(self.latest_tx_block_height.unwrap_or(0));
+
+        tracing::info!("Starting sync from block {}", block_height);
+
         let mut lake_config = LakeConfigBuilder::default().start_block_height(block_height);
 
         match self.config.chain_id.as_str() {
@@ -105,7 +109,7 @@ async fn handle_streamer_message(
                     } = action
                     {
                         if method_name != "transact" {
-                            tracing::trace!("Skipping tx with irrelevant method name");
+                            tracing::info!("Skipping non-'transact' transaction");
                             continue;
                         }
 

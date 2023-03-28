@@ -52,7 +52,7 @@ pub async fn start_indexer(
         tracing::info!("Storage worker listening for new transactions");
 
         while let Some(tx) = recv.recv().await {
-            tracing::debug!("Storing new transaction {}", tx.hash);
+            tracing::info!("Storing new transaction {}", tx.hash);
             if let Err(e) = db.store_tx(tx).await {
                 tracing::error!("Failed to store transaction: {e}");
             }
