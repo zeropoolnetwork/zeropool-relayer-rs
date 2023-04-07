@@ -22,6 +22,7 @@ use libzeropool_rs::libzeropool::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tower_http::trace::TraceLayer;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -43,20 +44,21 @@ pub fn routes(ctx: Arc<AppState>) -> Router {
         )
         .route("/job/:id", get(job))
         .route("/info", get(info))
+        .layer(TraceLayer::new_for_http())
         .with_state(ctx)
 }
 
 #[derive(Deserialize)]
 pub struct TxPaginationQuery {
-    pub offset: Option<u32>,
-    pub limit: Option<u32>,
+    pub offset: Option<u64>,
+    pub limit: Option<u64>,
 }
 
-#[axum::debug_handler]
 async fn create_transaction(
     State(state): State<Arc<AppState>>,
     Json(tx_data): Json<TxDataRequest>,
 ) -> AppResult<Json<Uuid>> {
+    tracing::info!("Received transaction");
     let mut validation_errors = Vec::new();
 
     validation_errors.extend(validate_tx(&tx_data, state.as_ref()).await);
@@ -153,7 +155,7 @@ async fn get_transactions(
         .iter_range(offset..(offset + limit * 128))?
         .map(|res| {
             res.map(|(index, data)| {
-                let is_mined = (index < pool_index as u32) as u8;
+                let is_mined = (index < pool_index) as u8;
                 let data = [&[is_mined], data.as_slice()].concat();
 
                 Hex(data)
@@ -164,7 +166,6 @@ async fn get_transactions(
     Ok(Json(txs))
 }
 
-#[axum::debug_handler]
 async fn job(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
@@ -240,21 +241,5 @@ impl IntoResponse for AppError {
                     .into_response()
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use fawkes_crypto::ff_uint::Uint;
-
-    use super::*;
-
-    #[test]
-    fn test_test() {
-        let num = U256::from(3u64).unchecked_sub(U256::from(4));
-
-        let is_negative = !num.unchecked_shr(255).is_zero();
-
-        assert!(is_negative);
     }
 }

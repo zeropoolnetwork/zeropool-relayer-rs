@@ -7299,6 +7299,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -8463,6 +8464,7 @@ dependencies = [
  "test-case",
  "thiserror",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
  "uuid",

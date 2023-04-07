@@ -5,18 +5,29 @@ use zeropool_indexer_tx_storage::Tx;
 const LIMIT: usize = 100;
 
 pub struct IndexerApi {
-    url: String,
+    url: Url,
+    mock: bool,
 }
 
 impl IndexerApi {
-    pub fn new(url: String) -> Self {
-        IndexerApi { url }
+    pub fn new(url: &str, mock: bool) -> Result<Self> {
+        let url = if mock {
+            "http://127.0.0.1:8080".parse()?
+        } else {
+            url.parse()?
+        };
+
+        Ok(IndexerApi { url, mock })
     }
 
     pub async fn fetch_all(&self) -> Result<Vec<Tx>> {
+        if self.mock {
+            return Ok(vec![]);
+        }
+
         let mut txs = vec![];
         let mut block_height = 0;
-        let mut url = Url::parse(&self.url)?;
+        let mut url = self.url.clone();
         url.path_segments_mut().unwrap().push("transactions");
 
         loop {

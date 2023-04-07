@@ -28,5 +28,6 @@ FROM rust:latest
 ARG PACKAGE
 ENV BINARY_NAME=zeropool-$PACKAGE
 
+WORKDIR /app
 COPY --from=build /zeropool-$PACKAGE/target/release/$BINARY_NAME .
-CMD /$BINARY_NAME
+CMD /app/$BINARY_NAME

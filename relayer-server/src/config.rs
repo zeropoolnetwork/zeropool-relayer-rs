@@ -13,13 +13,15 @@ pub enum BackendKind {
     Waves(crate::backend::waves::Config),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
     pub backend: BackendKind,
     pub redis_url: String,
     pub indexer_url: String,
     pub fee: u64,
+    pub mock_prover: bool,
+    pub mock_indexer: bool,
 }
 
 impl Config {
@@ -32,7 +34,7 @@ impl Config {
             #[cfg(feature = "near_backend")]
             "near" => BackendKind::Near(prefixed_config("NEAR")?),
             #[cfg(feature = "waves_backend")]
-            "waves" => BackendKind::Near(prefixed_config("NEAR")?),
+            "waves" => BackendKind::Waves(prefixed_config("WAVES")?),
             _ => panic!("Unknown backend: {backend_name}"),
         };
 
@@ -41,6 +43,12 @@ impl Config {
             redis_url: std::env::var("REDIS_URL")?,
             indexer_url: std::env::var("INDEXER_URL")?,
             fee: std::env::var("FEE")?.parse()?,
+            mock_prover: std::env::var("MOCK_PROVER")
+                .map(|var| var.parse::<bool>())
+                .unwrap_or(Ok(false))?,
+            mock_indexer: std::env::var("MOCK_INDEXER")
+                .map(|var| var.parse::<bool>())
+                .unwrap_or(Ok(false))?,
             backend,
         })
     }

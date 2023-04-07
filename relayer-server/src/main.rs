@@ -62,7 +62,11 @@ async fn main() {
     let server_handle = axum::Server::bind(&addr).serve(routes.into_make_service());
 
     tokio::select! {
-        _ = server_handle => {}
-        _ = worker_handle => {}
+        err = server_handle => {
+            tracing::error!("JSON API critical error: {err:?}");
+        }
+        err = worker_handle => {
+            tracing::error!("Worker critical error: {err:?}");
+        }
     }
 }

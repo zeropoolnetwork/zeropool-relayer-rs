@@ -30,8 +30,8 @@ pub struct TxDataRequest {
     pub memo: Vec<u8>,
     #[serde(with = "hex")]
     pub extra_data: Vec<u8>,
-    #[serde(default)]
-    pub sync: bool,
+    // #[serde(default)]
+    // pub sync: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, thiserror::Error)]

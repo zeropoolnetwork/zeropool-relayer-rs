@@ -36,6 +36,7 @@ byteorder = "1"
 secp256k1 = "0.21.0"
 thiserror = "1.0.39"
 reqwest = "0.11.14"
+tower-http = { version = "0.3.5", features = ["trace"] }
 
 [features]
 default = ["evm_backend"]

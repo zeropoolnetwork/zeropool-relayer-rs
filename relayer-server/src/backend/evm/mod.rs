@@ -23,6 +23,7 @@ use web3::{
     api::{Eth, Namespace},
     contract::{Contract, Options},
     ethabi::Token,
+    signing::recover,
     transports::Http,
     types::{TransactionParameters, U256},
     Web3,
@@ -38,12 +39,14 @@ use crate::{
 pub struct Config {
     pub rpc_url: String,
     pub pool_address: String,
+    pub token_address: String,
     pub sk: String,
 }
 
 pub struct EvmBackend {
     web3: Web3<Http>,
     contract: Contract<Http>,
+    token: Contract<Http>,
     sk: SecretKey,
 }
 
@@ -52,14 +55,24 @@ impl EvmBackend {
         let transport = Http::new(&config.rpc_url)?;
         let web3 = Web3::new(transport.clone());
         let contract = Contract::from_json(
-            Eth::new(transport),
+            web3.eth(),
             config.pool_address.parse()?,
-            include_bytes!("./Pool.json"),
+            include_bytes!("pool.json"),
+        )?;
+        let token = Contract::from_json(
+            web3.eth(),
+            config.token_address.parse()?,
+            include_bytes!("token.json"),
         )?;
 
         let sk = SecretKey::from_str(&config.sk)?;
 
-        Ok(Self { web3, contract, sk })
+        Ok(Self {
+            web3,
+            contract,
+            sk,
+            token,
+        })
     }
 
     fn encode_calldata(&self, tx: FullTxData) -> Result<Vec<u8>> {
@@ -122,6 +135,10 @@ impl EvmBackend {
 #[async_trait]
 impl BlockchainBackend for EvmBackend {
     fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError> {
+        // let address = recover(&tx.signature, &tx.hash).unwrap();
+        // let balance = self
+        //     .token
+        //     .query("balanceOf", tx.sender, None, Options::default(), None);
         // TODO: Check the balance of the sender for deposits.
         vec![]
     }

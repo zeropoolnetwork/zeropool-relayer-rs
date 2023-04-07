@@ -6,7 +6,7 @@ use fawkes_crypto::{
     ff_uint::{PrimeField, Uint},
 };
 use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     backend::BlockchainBackend,
@@ -22,10 +22,11 @@ use crate::{
 const TX_INDEX_STRIDE: usize = libzeropool_rs::libzeropool::constants::OUT + 1;
 
 pub struct AppState {
+    pub config: Config,
     pub tx_storage: TxStorage,
+    pub tree: RwLock<MerkleTree>,
     pub job_queue: JobQueue<Payload, AppState>,
     pub backend: Arc<dyn BlockchainBackend>,
-    pub tree: MerkleTree,
     pub pool_index: RwLock<u64>,
     pub indexer: IndexerApi,
     pub fee: u64,
@@ -36,7 +37,7 @@ pub struct AppState {
 
 impl AppState {
     pub async fn init(config: Config) -> Result<Self> {
-        let backend = match config.backend {
+        let backend = match config.backend.clone() {
             #[cfg(feature = "evm_backend")]
             BackendKind::Evm(evm_config) => {
                 Arc::new(crate::backend::evm::EvmBackend::new(evm_config).unwrap())
@@ -48,9 +49,10 @@ impl AppState {
         let tx_storage = TxStorage::open("transactions.persy")?;
         let tree = MerkleTree::open("tree.persy")?;
         let pool_index = backend.get_pool_index().await?;
-        let indexer = IndexerApi::new(config.indexer_url);
+        let indexer = IndexerApi::new(&config.indexer_url, config.mock_indexer)?;
         let relayer_num_leaves = tree.num_leaves();
         let relayer_index = relayer_num_leaves * TX_INDEX_STRIDE as u64;
+        let fee = config.fee;
 
         // TODO: Optimize
         //     - Fetch only new transactions
@@ -67,7 +69,7 @@ impl AppState {
             let tx_data = backend.parse_calldata(tx.calldata)?;
             let tx_hash = backend.parse_hash(&tx.hash)?;
 
-            tx_storage.set(tx_index as u32, tx_data.out_commit, &tx_hash, &tx_data.memo)?;
+            tx_storage.set(tx_index as u64, tx_data.out_commit, &tx_hash, &tx_data.memo)?;
             tree.set_leaf(relayer_num_leaves + i as u64, tx_data.out_commit)?;
         }
 
@@ -81,13 +83,14 @@ impl AppState {
         let tree_params = Parameters::read(&mut tree_params_data.as_slice(), true, true)?;
 
         Ok(Self {
+            config,
             tx_storage,
             job_queue,
             backend,
-            tree,
+            tree: RwLock::new(tree),
             indexer,
             pool_index: RwLock::new(pool_index),
-            fee: config.fee,
+            fee,
             transfer_vk,
             tree_vk,
             tree_params,
@@ -96,9 +99,5 @@ impl AppState {
 
     pub async fn get_pool_index(&self) -> u64 {
         *self.pool_index.read().await
-    }
-
-    pub fn get_optimistic_index(&self) -> u64 {
-        self.tree.num_leaves() * TX_INDEX_STRIDE as u64
     }
 }
