@@ -21,7 +21,7 @@ use libzeropool_rs::libzeropool::{
     },
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use tower_http::trace::TraceLayer;
 use tracing::instrument;
 use uuid::Uuid;
@@ -54,10 +54,16 @@ pub struct TxPaginationQuery {
     pub limit: Option<u64>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTransactionResponse {
+    pub job_id: Uuid,
+}
+
 async fn create_transaction(
     State(state): State<Arc<AppState>>,
     Json(tx_data): Json<TxDataRequest>,
-) -> AppResult<Json<Uuid>> {
+) -> AppResult<Json<CreateTransactionResponse>> {
     tracing::info!("Received transaction");
     let mut validation_errors = Vec::new();
 
@@ -81,7 +87,7 @@ async fn create_transaction(
 
     let job_id = state.job_queue.push(tx).await?;
 
-    Ok(Json(job_id))
+    Ok(Json(CreateTransactionResponse { job_id }))
 }
 
 async fn validate_tx(tx: &TxDataRequest, state: &AppState) -> Vec<TxValidationError> {
@@ -106,7 +112,7 @@ async fn validate_tx(tx: &TxDataRequest, state: &AppState) -> Vec<TxValidationEr
     let delta = tx.proof.inputs[3];
     let (token_amount, energy_amount, transfer_index, _pool_id) = parse_delta(delta);
 
-    if transfer_index.to_uint().0 < U256::from(*state.pool_index.read().await) {
+    if transfer_index.to_uint().0 > U256::from(*state.pool_index.read().await) {
         errors.push(TxValidationError::InvalidTxIndex);
     }
 
@@ -166,17 +172,23 @@ async fn get_transactions(
     Ok(Json(txs))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JobStatusResponse {
+    state: JobStatus, // tx_hash: Option<String>,
+}
+
 async fn job(
     State(state): State<Arc<AppState>>,
     Path(id): Path<Uuid>,
-) -> AppResult<Json<JobStatus>> {
-    let status = state.job_queue.job_status(id).await?;
+) -> AppResult<Json<JobStatusResponse>> {
+    let state = state.job_queue.job_status(id).await?;
 
-    let Some(status) = status else {
+    let Some(state) = state else {
         return Err(AppError::NotFound);
     };
 
-    Ok(Json(status))
+    Ok(Json(JobStatusResponse { state }))
 }
 
 #[instrument]

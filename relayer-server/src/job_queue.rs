@@ -18,8 +18,8 @@ const STATUS_EXPIRE_SECONDS: usize = 60 * 60 * 24; // 24 hours
 pub enum JobStatus {
     Pending,
     InProgress,
-    Done,
-    Error,
+    Completed,
+    Failed,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,7 +77,7 @@ where
                     Ok(_) => {
                         con.set_ex(
                             format!("job:{job_id}"),
-                            bincode::serialize(&JobStatus::Done)?,
+                            bincode::serialize(&JobStatus::Completed)?,
                             STATUS_EXPIRE_SECONDS,
                         )
                         .await?;
@@ -86,11 +86,11 @@ where
                     Err(e) => {
                         con.set_ex(
                             format!("job:{job_id}"),
-                            bincode::serialize(&JobStatus::Error)?,
+                            bincode::serialize(&JobStatus::Failed)?,
                             STATUS_EXPIRE_SECONDS,
                         )
                         .await?;
-                        tracing::error!("Job failed: {}", e);
+                        tracing::error!("Job {job_id} failed: {e}");
                     }
                 }
             }

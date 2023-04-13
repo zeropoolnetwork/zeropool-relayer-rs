@@ -64,9 +64,8 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     let proof_filled = tree.zp_merkle_proof(prev_commit_index)?;
     let proof_free = tree.zp_merkle_proof(next_commit_index)?;
 
-    let prev_leaf = tree
-        .get_node(constants::OUTPLUSONELOG as u64, prev_commit_index)?
-        .ok_or_else(|| anyhow::anyhow!("No previous leaf"))?;
+    let prev_leaf =
+        tree.get_node_with_default(constants::OUTPLUSONELOG as u64, prev_commit_index)?;
 
     // Let the other tasks start
     drop(tree);
@@ -133,7 +132,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         &tx.memo,
     )?;
 
-    tracing::info!("Sent tx with hash: {tx_hash:#?}");
+    tracing::info!("Sent tx with hash: {}", ctx.backend.format_hash(&tx_hash));
 
     ctx.job_queue.set_extra(job.id, TxMeta { tx_hash }).await?;
     *ctx.pool_index.write().await = next_commit_index;

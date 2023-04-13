@@ -5,6 +5,7 @@ use serde::{de::DeserializeOwned, Deserialize};
 
 #[derive(Debug, Clone)]
 pub enum BackendKind {
+    Mock,
     #[cfg(feature = "evm_backend")]
     Evm(crate::backend::evm::Config),
     #[cfg(feature = "near")]
@@ -29,6 +30,7 @@ impl Config {
         let backend_name = std::env::var("BACKEND")?;
 
         let backend = match backend_name.as_str() {
+            "mock" => BackendKind::Mock,
             #[cfg(feature = "evm_backend")]
             "evm" => BackendKind::Evm(prefixed_config("EVM")?),
             #[cfg(feature = "near_backend")]

@@ -7,11 +7,14 @@ use serde_repr::*;
 
 use crate::{Engine, Fr};
 
-#[derive(Debug, Clone, Copy, Serialize_repr, Deserialize_repr)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(u16)]
 pub enum TxType {
+    #[serde(rename = "0000")]
     Deposit = 0,
+    #[serde(rename = "0001")]
     Transfer = 1,
+    #[serde(rename = "0002")]
     Withdraw = 2,
 }
 
@@ -64,6 +67,7 @@ pub struct ParsedTxData {
 }
 
 /// Full data needed to create a blockchain transaction.
+#[derive(Serialize, Deserialize)]
 pub struct FullTxData {
     pub tx_type: TxType,
     pub proof: Proof<Engine>,

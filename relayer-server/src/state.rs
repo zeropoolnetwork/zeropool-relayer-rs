@@ -37,7 +37,8 @@ pub struct AppState {
 
 impl AppState {
     pub async fn init(config: Config) -> Result<Self> {
-        let backend = match config.backend.clone() {
+        let backend: Arc<dyn BlockchainBackend> = match config.backend.clone() {
+            BackendKind::Mock => Arc::new(crate::backend::mock::MockBackend::new()),
             #[cfg(feature = "evm_backend")]
             BackendKind::Evm(evm_config) => {
                 Arc::new(crate::backend::evm::EvmBackend::new(evm_config).unwrap())

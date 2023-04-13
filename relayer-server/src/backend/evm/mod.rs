@@ -235,4 +235,8 @@ impl BlockchainBackend for EvmBackend {
         let hash = hex::decode(hash)?;
         Ok(hash)
     }
+
+    fn format_hash(&self, hash: &[u8]) -> String {
+        hex::encode(hash)
+    }
 }

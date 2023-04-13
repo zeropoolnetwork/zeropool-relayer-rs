@@ -5,6 +5,7 @@ use crate::tx::{FullTxData, ParsedTxData, TxDataRequest, TxValidationError};
 
 #[cfg(feature = "evm_backend")]
 pub mod evm;
+pub mod mock;
 #[cfg(feature = "near_backend")]
 pub mod near;
 #[cfg(feature = "waves_backend")]
@@ -22,6 +23,7 @@ pub trait BlockchainBackend: Sync + Send {
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<FullTxData>;
     fn parse_hash(&self, hash: &str) -> Result<Vec<u8>>;
+    fn format_hash(&self, hash: &[u8]) -> String;
 }
 
 pub type TxHash = Vec<u8>;

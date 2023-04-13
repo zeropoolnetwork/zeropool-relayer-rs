@@ -424,8 +424,14 @@ impl MerkleTree {
         self.nodes.get(depth, index)
     }
 
+    pub fn get_node_with_default(&self, depth: u64, index: u64) -> Result<Hash> {
+        self.nodes
+            .get(depth, index)
+            .map(|val| val.unwrap_or_else(|| self.default_nodes[depth as usize]))
+    }
+
     pub fn merkle_proof(&self, index: Index) -> impl Iterator<Item = Result<Hash>> + '_ {
-        (1..H as u64).rev().enumerate().map(move |(i, depth)| {
+        (0..H as u64).rev().enumerate().map(move |(i, depth)| {
             let cur_index = index >> i;
             let sibling_index = cur_index ^ 1;
             let sibling_hash_res = self
