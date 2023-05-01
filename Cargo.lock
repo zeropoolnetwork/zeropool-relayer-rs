@@ -8442,6 +8442,7 @@ dependencies = [
  "base64 0.21.0",
  "bincode",
  "borsh",
+ "bs58",
  "byteorder",
  "dotenv",
  "envy",
