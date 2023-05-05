@@ -7,7 +7,7 @@ pub mod evm;
 #[cfg(any(
     feature = "near-lake-framework",
     feature = "near-indexer-framework",
-    feature = "near-indexer-explorer"
+    feature = "near-archive-node"
 ))]
 pub mod near;
 

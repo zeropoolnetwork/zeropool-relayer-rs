@@ -6,8 +6,8 @@ use zeropool_indexer_tx_storage::STORAGE_NAME;
 pub enum BackendKind {
     #[cfg(feature = "evm")]
     Evm(crate::backend::evm::Config),
-    #[cfg(feature = "near-indexer-explorer")]
-    NearIndexerExplorer(crate::backend::near::explorer_indexer::Config),
+    #[cfg(feature = "near-archive-node")]
+    NearArchiveNode(crate::backend::near::archive_node::Config),
     #[cfg(feature = "near-indexer-framework")]
     NearIndexerFramework(crate::backend::near::indexer_framework::Config),
     #[cfg(feature = "near-lake-framework")]
@@ -27,8 +27,8 @@ impl Config {
         let backend = match backend_name.as_str() {
             #[cfg(feature = "evm")]
             "evm" => BackendKind::Evm(prefixed_config("EVM")?),
-            #[cfg(feature = "near-indexer-explorer")]
-            "near-indexer-explorer" => BackendKind::NearIndexerExplorer(prefixed_config("NEAR")?),
+            #[cfg(feature = "near-archive-node")]
+            "near-archive-node" => BackendKind::NearArchiveNode(prefixed_config("NEAR")?),
             #[cfg(feature = "near-indexer-framework")]
             "near-indexer-framework" => BackendKind::NearIndexerFramework(prefixed_config("NEAR")?),
             #[cfg(feature = "near-lake-framework")]

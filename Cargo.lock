@@ -5969,9 +5969,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.14"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21eed90ec8570952d53b772ecf8f206aa1ec9a3d76b2521c56c42973f2d91ee9"
+checksum = "13293b639a097af28fc8a90f22add145a9c954e49d77da06263d58cf44d5fb91"
 dependencies = [
  "base64 0.21.0",
  "bytes",
@@ -6357,9 +6357,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.87"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce777b7b150d76b9cf60d28b55f5847135a003f7d7350c6be7a773508ce7d45"
+checksum = "057d394a50403bcac12672b2b18fb387ab6d289d957dab67dd201875391e52f1"
 dependencies = [
  "itoa",
  "ryu",
@@ -8421,10 +8421,13 @@ dependencies = [
  "futures 0.3.26",
  "hex 0.4.3",
  "near-indexer",
+ "near-jsonrpc-primitives",
  "near-lake-framework",
+ "near-primitives 0.0.0",
  "num-traits",
+ "reqwest",
  "serde",
- "sqlx",
+ "serde_json",
  "syn 1.0.102",
  "tokio",
  "tracing",

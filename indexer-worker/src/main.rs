@@ -2,8 +2,6 @@ mod backend;
 mod config;
 mod indexer;
 
-// TODO: Split into two separate services: indexer and api
-
 #[cfg(not(feature = "near-indexer-framework"))]
 #[tokio::main]
 async fn main() {

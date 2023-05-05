@@ -17,21 +17,25 @@ base64 = "0.21.0"
 dotenv = "0.15.0"
 serde = "1.0.145"
 envy = "0.4.2"
+futures = "0.3.26"
+hex = "0.4.3"
+async-trait = "0.1.64"
+serde_json = "1.0.96"
+reqwest = "0.11.17"
 
 # Backend-specific dependencies
 web3 = { version = "0.18.0", optional = true }
 near-indexer = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
 near-lake-framework = { version = "0.6.1", optional = true }
+near-jsonrpc-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
+near-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
 actix = { version = "0.13.0", optional = true }
-sqlx = { version = "0.6.2", optional = true, features = ["postgres", "runtime-tokio-native-tls", "json", "bigdecimal", "time", "offline"] }
-futures = "0.3.26"
-hex = "0.4.3"
-async-trait = "0.1.64"
+
 
 [features]
-default = ["evm", "near-lake-framework", "near-indexer-explorer", "near-indexer-framework"]
+default = ["evm", "near-lake-framework", "near-indexer-framework", "near-archive-node"]
 evm = ["dep:web3"]
-near-indexer-explorer = ["dep:sqlx"]
 near-indexer-framework = ["dep:near-indexer", "dep:actix"]
 near-lake-framework = ["dep:near-lake-framework"]
+near-archive-node = ["dep:near-jsonrpc-primitives", "dep:near-primitives"]
 

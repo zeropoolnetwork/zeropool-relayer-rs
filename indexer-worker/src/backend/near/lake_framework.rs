@@ -89,17 +89,18 @@ async fn handle_streamer_message(
             for t in chunk.transactions {
                 match t.outcome.execution_outcome.outcome.status {
                     ExecutionStatusView::Unknown => {
-                        tracing::trace!("Skipping tx with unknown status");
+                        tracing::debug!("Skipping tx with unknown status");
                         continue;
                     }
                     ExecutionStatusView::Failure(_) => {
-                        tracing::trace!("Skipping failed tx");
+                        tracing::debug!("Skipping failed tx");
                         continue;
                     }
                     _ => (),
                 }
 
                 if t.transaction.receiver_id.as_str() != contract_address {
+                    tracing::debug!("Skipping tx to another contract");
                     continue;
                 }
 

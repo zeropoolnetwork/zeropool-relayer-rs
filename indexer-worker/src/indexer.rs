@@ -24,15 +24,15 @@ pub async fn start_indexer(
                 .start(send)
                 .await?
         }
-        #[cfg(feature = "near-lake-framework")]
-        BackendKind::NearLakeFramework(near_config) => {
-            backend::near::lake_framework::NearLakeFrameworkBackend::new(near_config, latest_tx)?
+        #[cfg(feature = "near-archive-node")]
+        BackendKind::NearArchiveNode(near_config) => {
+            backend::near::archive_node::NearArchiveNodeBackend::new(near_config, latest_tx)?
                 .start(send)
                 .await?
         }
-        #[cfg(feature = "near-indexer-explorer")]
-        BackendKind::NearIndexerExplorer(near_config) => {
-            backend::near::explorer_indexer::NearExplorerBackend::new(near_config, latest_tx)?
+        #[cfg(feature = "near-lake-framework")]
+        BackendKind::NearLakeFramework(near_config) => {
+            backend::near::lake_framework::NearLakeFrameworkBackend::new(near_config, latest_tx)?
                 .start(send)
                 .await?
         }
