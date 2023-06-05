@@ -1,22 +1,10 @@
-use anyhow::Result;
 use libzeropool_rs::libzeropool::fawkes_crypto::{
     backend::bellman_groth16::prover::Proof, ff_uint::Num,
 };
 use serde::{Deserialize, Serialize};
-use serde_repr::*;
+use zeropool_tx::TxType;
 
 use crate::{Engine, Fr};
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[repr(u16)]
-pub enum TxType {
-    #[serde(rename = "0000")]
-    Deposit = 0,
-    #[serde(rename = "0001")]
-    Transfer = 1,
-    #[serde(rename = "0002")]
-    Withdraw = 2,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct ProofWithInputs {
@@ -59,20 +47,6 @@ pub enum TxValidationError {
 pub struct ParsedTxData {
     pub tx_type: TxType,
     pub proof: Proof<Engine>,
-    pub delta: Num<Fr>,
-    pub out_commit: Num<Fr>,
-    pub nullifier: Num<Fr>,
-    pub memo: Vec<u8>,
-    pub extra_data: Vec<u8>,
-}
-
-/// Full data needed to create a blockchain transaction.
-#[derive(Serialize, Deserialize)]
-pub struct FullTxData {
-    pub tx_type: TxType,
-    pub proof: Proof<Engine>,
-    pub tree_proof: Proof<Engine>,
-    pub root_after: Num<Fr>,
     pub delta: Num<Fr>,
     pub out_commit: Num<Fr>,
     pub nullifier: Num<Fr>,

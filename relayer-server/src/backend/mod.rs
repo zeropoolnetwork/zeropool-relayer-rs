@@ -1,7 +1,11 @@
 use anyhow::Result;
 use axum::async_trait;
+use zeropool_tx::TxData;
 
-use crate::tx::{FullTxData, ParsedTxData, TxDataRequest, TxValidationError};
+use crate::{
+    tx::{ParsedTxData, TxValidationError},
+    Engine,
+};
 
 #[cfg(feature = "evm_backend")]
 pub mod evm;
@@ -17,11 +21,13 @@ pub trait BlockchainBackend: Sync + Send {
     fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError>;
 
     /// Create, sign, and send transaction to the blockchain.
-    async fn send_tx(&self, tx: FullTxData) -> Result<TxHash>;
+    async fn send_tx(&self, tx: TxData<Engine>) -> Result<TxHash>;
 
+    /// Fetch the current pool index from the blockchain.
     async fn get_pool_index(&self) -> Result<u64>;
 
-    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<FullTxData>;
+    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>>;
+
     fn parse_hash(&self, hash: &str) -> Result<Vec<u8>>;
     fn format_hash(&self, hash: &[u8]) -> String;
 }

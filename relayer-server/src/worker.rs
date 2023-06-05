@@ -9,24 +9,19 @@ use libzeropool_rs::{
     libzeropool::{
         constants,
         fawkes_crypto::ff_uint::{Num, Uint},
-        native::{
-            tree::{TreePub, TreeSec},
-            tx::parse_delta,
-        },
+        native::tree::{TreePub, TreeSec},
         POOL_PARAMS,
     },
     proof::prove_tree,
 };
 use serde::{Deserialize, Serialize};
+use zeropool_tx::TxData;
 
 use crate::{
     backend::BlockchainBackend,
     job_queue::{Job, JobQueue},
-    merkle_tree::MerkleTree,
     state::AppState,
-    tx::{FullTxData, ParsedTxData},
-    tx_storage::{self, TxStorage},
-    Fr,
+    tx::ParsedTxData,
 };
 
 pub type Payload = ParsedTxData;
@@ -95,7 +90,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         prove_tree(&ctx.tree_params, &*POOL_PARAMS, tree_pub, tree_sec).1
     };
 
-    let full_tx = FullTxData {
+    let full_tx = TxData {
         tx_type: tx.tx_type,
         delta: tx.delta,
         out_commit: tx.out_commit,
@@ -105,6 +100,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         tree_proof,
         proof: tx.proof,
         extra_data: tx.extra_data,
+        token_id: String::new(),
     };
 
     tracing::info!("Sending tx");

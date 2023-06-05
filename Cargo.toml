@@ -4,11 +4,13 @@ members = [
     "indexer-tx-storage",
     "indexer-worker",
     "indexer-api",
+#    "prover",
 ]
 default-members = [
     "indexer-worker",
     "indexer-api",
     "relayer-server",
+#    "prover",
 ]
 
 [workspace.package]
@@ -20,3 +22,4 @@ near-indexer = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "
 near-o11y = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
 near-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
 near-indexer-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }
+near-client-primitives = { git = "https://github.com/zeropoolnetwork/nearcore", branch = "zp/fix-deps", optional = true }

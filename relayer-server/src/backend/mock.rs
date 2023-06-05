@@ -1,30 +1,12 @@
-use std::{
-    io::{Read, Write},
-    str::FromStr,
-};
-
-use anyhow::{bail, Result};
-use axum::{async_trait, body::Full};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use fawkes_crypto::{
-    backend::bellman_groth16::group::{G1Point, G2Point},
-    ff_uint::NumRepr,
-};
-use libzeropool_rs::libzeropool::{
-    fawkes_crypto::{
-        backend::bellman_groth16::prover::Proof,
-        ff_uint::{Num, PrimeField, Uint},
-    },
-    native::tx::parse_delta,
-};
-use secp256k1::SecretKey;
-use serde::Deserialize;
+use anyhow::Result;
+use axum::async_trait;
 use tokio::sync::Mutex;
+use zeropool_tx::TxData;
 
 use crate::{
     backend::{BlockchainBackend, TxHash},
-    tx::{FullTxData, ParsedTxData, TxDataRequest, TxType, TxValidationError},
-    Engine, Fr,
+    tx::{ParsedTxData, TxValidationError},
+    Engine,
 };
 
 pub struct MockBackend {
@@ -41,7 +23,7 @@ impl MockBackend {
 
 #[async_trait]
 impl BlockchainBackend for MockBackend {
-    fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError> {
+    fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         // let address = recover(&tx.signature, &tx.hash).unwrap();
         // let balance = self
         //     .token
@@ -51,7 +33,7 @@ impl BlockchainBackend for MockBackend {
     }
 
     /// Sign and send a transaction to the blockchain.
-    async fn send_tx(&self, _tx: FullTxData) -> Result<TxHash> {
+    async fn send_tx(&self, _tx: TxData<Engine>) -> Result<TxHash> {
         let mut pool_index = self.pool_index.lock().await;
         *pool_index += 1;
         Ok(pool_index.to_be_bytes().to_vec())
@@ -61,7 +43,7 @@ impl BlockchainBackend for MockBackend {
         Ok(*self.pool_index.lock().await)
     }
 
-    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<FullTxData> {
+    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
         Ok(bincode::deserialize(&calldata)?)
     }
 

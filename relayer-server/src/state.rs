@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use fawkes_crypto::{
-    backend::bellman_groth16::verifier::VK,
-    ff_uint::{PrimeField, Uint},
-};
+use fawkes_crypto::backend::bellman_groth16::verifier::VK;
 use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use crate::{
     backend::BlockchainBackend,
@@ -40,9 +37,9 @@ impl AppState {
         let backend: Arc<dyn BlockchainBackend> = match config.backend.clone() {
             BackendKind::Mock => Arc::new(crate::backend::mock::MockBackend::new()),
             #[cfg(feature = "evm_backend")]
-            BackendKind::Evm(evm_config) => {
-                Arc::new(crate::backend::evm::EvmBackend::new(evm_config).unwrap())
-            }
+            BackendKind::Evm(config) => Arc::new(crate::backend::evm::EvmBackend::new(config)?),
+            #[cfg(feature = "near_backend")]
+            BackendKind::Near(config) => Arc::new(crate::backend::near::NearBackend::new(config)?),
             _ => todo!("Backend unimplemented"),
         };
 

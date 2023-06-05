@@ -1,39 +1,26 @@
-use std::{future::Future, net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post, IntoMakeService},
-    Json, Router, Server,
+    routing::get,
+    Json, Router,
 };
 use byteorder::{BigEndian, ReadBytesExt};
-use fawkes_crypto::{
-    backend::bellman_groth16::verifier::verify,
-    engines::U256,
-    ff_uint::{Num, Uint},
-};
-use libzeropool_rs::libzeropool::{
-    fawkes_crypto::backend::bellman_groth16::engines::Bn256,
-    native::{
-        params::{PoolBN256, PoolParams as PoolParamsTrait},
-        tx::parse_delta,
-    },
-};
+use fawkes_crypto::{backend::bellman_groth16::verifier::verify, engines::U256, ff_uint::Uint};
+use libzeropool_rs::libzeropool::native::tx::parse_delta;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value as JsonValue};
+use serde_json::json;
 use tower_http::trace::TraceLayer;
 use tracing::instrument;
 use uuid::Uuid;
+use zeropool_tx::TxType;
 
 use crate::{
-    config::*,
-    job_queue::{JobQueue, JobStatus},
+    job_queue::JobStatus,
     state::AppState,
-    tx::{ParsedTxData, TxDataRequest, TxType, TxValidationError},
-    tx_storage::TxStorage,
-    worker::*,
-    Fr,
+    tx::{ParsedTxData, TxDataRequest, TxValidationError},
 };
 
 pub fn routes(ctx: Arc<AppState>) -> Router {
@@ -42,6 +29,8 @@ pub fn routes(ctx: Arc<AppState>) -> Router {
             "/transactions",
             get(get_transactions).post(create_transaction),
         )
+        // For compatibility with old API
+        // .route("/sendTransactions", post(send_transactions))
         .route("/job/:id", get(job))
         .route("/info", get(info))
         .layer(TraceLayer::new_for_http())
@@ -89,6 +78,39 @@ async fn create_transaction(
 
     Ok(Json(CreateTransactionResponse { job_id }))
 }
+
+// async fn create_transactions(
+//     State(state): State<Arc<AppState>>,
+//     Json(txs): Json<Vec<TxDataRequest>>,
+// ) -> AppResult<Json<CreateTransactionResponse>> {
+//     tracing::info!("Received transaction");
+//
+//     let mut validation_errors = Vec::new();
+//     for tx in &txs {
+//         validation_errors.extend(validate_tx(&tx, state.as_ref()).await);
+//     }
+//
+//     let txs = txs
+//         .into_iter()
+//         .map(|tx_data| ParsedTxData {
+//             tx_type: tx_data.tx_type,
+//             proof: tx_data.proof.proof,
+//             delta: tx_data.proof.inputs[3],
+//             out_commit: tx_data.proof.inputs[2],
+//             nullifier: tx_data.proof.inputs[1],
+//             memo: tx_data.memo,
+//             extra_data: tx_data.extra_data,
+//         })
+//         .collect::<Vec<_>>();
+//
+//     if !validation_errors.is_empty() {
+//         return Err(AppError::TxValidationErrors(validation_errors));
+//     }
+//
+//     let job_id = state.job_queue.push(tx).await?;
+//
+//     Ok(Json(CreateTransactionResponse { job_id }))
+// }
 
 async fn validate_tx(tx: &TxDataRequest, state: &AppState) -> Vec<TxValidationError> {
     let mut errors = Vec::new();

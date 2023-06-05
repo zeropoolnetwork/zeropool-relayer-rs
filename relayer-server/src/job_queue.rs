@@ -1,7 +1,7 @@
 use std::{future::Future, sync::Arc};
 
 use anyhow::Result;
-use redis::{AsyncCommands, Client, FromRedisValue};
+use redis::{AsyncCommands, Client};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -180,8 +180,8 @@ mod tests {
             })
             .unwrap();
 
-        let job_id = worker.push("hello".to_string()).await.unwrap();
-        let job_id = worker.push("world".to_string()).await.unwrap();
+        let _job_id = worker.push("hello".to_string()).await.unwrap();
+        let _job_id = worker.push("world".to_string()).await.unwrap();
 
         handle.await??;
 

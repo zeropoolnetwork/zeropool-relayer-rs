@@ -1,16 +1,14 @@
-use std::str::FromStr;
-
 use anyhow::Result;
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::de::DeserializeOwned;
 
 #[derive(Debug, Clone)]
 pub enum BackendKind {
     Mock,
     #[cfg(feature = "evm_backend")]
     Evm(crate::backend::evm::Config),
-    #[cfg(feature = "near")]
+    #[cfg(feature = "near_backend")]
     Near(crate::backend::near::Config),
-    #[cfg(feature = "waves")]
+    #[cfg(feature = "waves_backend")]
     Waves(crate::backend::waves::Config),
 }
 

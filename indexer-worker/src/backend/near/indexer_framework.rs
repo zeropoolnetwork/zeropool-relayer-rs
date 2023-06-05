@@ -145,7 +145,7 @@ async fn listen_blocks(
                                 sender_address: t.transaction.signer_id.to_string(),
                                 receiver_address: t.transaction.receiver_id.to_string(),
                                 signature: t.transaction.signature.to_string(),
-                                calldata: args,
+                                calldata: args.into(),
                             };
 
                             send.send(tx).await?;

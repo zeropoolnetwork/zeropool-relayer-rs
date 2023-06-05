@@ -40,30 +40,36 @@ impl BackendMethods for NearArchiveNodeBackend {
 
         let hashes: Vec<String> = serde_json::from_str(&std::fs::read_to_string(hashes_path)?)?;
 
-        for tx_hash in hashes {
-            let tx = get_tx_status(
-                &self.config.rpc_url,
-                &tx_hash,
-                &self.config.contract_address,
-            )
-            .await?;
+        Ok(tokio::spawn(async move {
+            for tx_hash in hashes {
+                let tx = get_tx_status(
+                    &self.config.rpc_url,
+                    &tx_hash,
+                    &self.config.contract_address,
+                )
+                .await?;
 
-            let block = get_block(
-                &self.config.rpc_url,
-                &tx.transaction_outcome.block_hash.to_string(),
-            )
-            .await?;
+                let block = get_block(
+                    &self.config.rpc_url,
+                    &tx.transaction_outcome.block_hash.to_string(),
+                )
+                .await?;
 
-            process_tx(
-                tx,
-                block.header,
-                &self.config.contract_address,
-                send.clone(),
-            )
-            .await;
-        }
+                process_tx(
+                    tx,
+                    block.header,
+                    &self.config.contract_address,
+                    send.clone(),
+                )
+                .await;
+            }
 
-        Ok(tokio::spawn(async move { Ok(()) }))
+            // can't return, so just do nothing
+            tracing::info!("Initial transactions processed. Idling...");
+            tokio::signal::ctrl_c().await?;
+
+            Ok(())
+        }))
     }
 }
 
@@ -104,8 +110,10 @@ async fn process_tx(
                 sender_address: tx.transaction.signer_id.to_string(),
                 receiver_address: tx.transaction.receiver_id.to_string(),
                 signature: tx.transaction.signature.to_string(),
-                calldata: args,
+                calldata: args.into(),
             };
+
+            tracing::info!("Processing TX: {:?}", tx);
 
             send.send(tx)
                 .await

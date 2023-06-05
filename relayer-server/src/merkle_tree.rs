@@ -1,22 +1,15 @@
-use std::collections::{HashMap, HashSet};
-
 use anyhow::{bail, Result};
 use borsh::BorshDeserialize;
-use itertools::Itertools;
-use libzeropool_rs::{
-    libzeropool::{
-        constants,
-        fawkes_crypto::{
-            core::sizedvec::SizedVec,
-            ff_uint::Num,
-            native::poseidon::{poseidon, MerkleProof},
-        },
-        native::params::PoolParams,
-        POOL_PARAMS,
+use libzeropool_rs::libzeropool::{
+    constants,
+    fawkes_crypto::{
+        ff_uint::Num,
+        native::poseidon::{poseidon, MerkleProof},
     },
-    utils::zero_note,
+    native::params::PoolParams,
+    POOL_PARAMS,
 };
-use persy::{ByteVec, Persy, PersyId, Transaction, ValueMode};
+use persy::{ByteVec, Persy, Transaction, ValueMode};
 
 use crate::Fr;
 
@@ -225,7 +218,7 @@ impl MerkleTree {
         for (i, depth) in (1..=depth).rev().enumerate() {
             let cur_index = index >> i;
 
-            let mut data = {
+            let data = {
                 let sibling_index = cur_index ^ 1;
                 let sibling_hash = self
                     .nodes
@@ -303,7 +296,7 @@ impl MerkleTree {
 
             let num_nodes = (num_leaves as u64 >> i).max(1);
 
-            for mut lhs_index in (cur_index..=(cur_index + num_nodes)).step_by(2) {
+            for lhs_index in (cur_index..=(cur_index + num_nodes)).step_by(2) {
                 let rhs_index = lhs_index + 1;
 
                 let parent_hash = {
@@ -462,7 +455,6 @@ impl MerkleTree {
 mod tests {
     use std::{str::FromStr, sync::atomic::AtomicU64};
 
-    use scopeguard::defer;
     use test_case::test_case;
 
     use super::*;
@@ -523,7 +515,7 @@ mod tests {
         "21405206392816009270791415764229930987086761294527961786896913105350324305770"
     )]
     fn test_tree_add_leaves(hashes: &[&str], expected_root: &str) {
-        let (_, mut tree) = tree();
+        let (_, tree) = tree();
 
         tree.add_leaves_at(0, hashes.iter().map(|s| Hash::from_str(s).unwrap()))
             .unwrap();
@@ -548,7 +540,7 @@ mod tests {
         "to 1"
     )]
     fn test_tree_rollback_to(hashes: &[&str], rollback: u64, root: &str) {
-        let (_, mut tree) = tree();
+        let (_, tree) = tree();
 
         tree.add_leaves_at(0, hashes.iter().map(|s| Hash::from_str(s).unwrap()))
             .unwrap();
