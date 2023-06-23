@@ -15,39 +15,9 @@ type SharedDb = Arc<Storage>;
 
 const MAX_TX_LIMIT: u64 = 100;
 
-#[derive(Debug, Clone)]
-pub struct Config {
-    port: u16,
-    storage: zeropool_indexer_tx_storage::Config,
-}
-
-impl Config {
-    pub fn init() -> Self {
-        Config {
-            port: std::env::var("PORT")
-                .ok()
-                .and_then(|port| port.parse().ok())
-                .unwrap_or(3000),
-            storage: envy::prefixed(format!("{STORAGE_NAME}_"))
-                .from_env()
-                .unwrap(),
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    start().await.unwrap();
-}
-
-async fn start() -> Result<()> {
+pub async fn start(port: u16, storage: Arc<Storage>) -> Result<()> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
-
-    let config = Config::init();
-    tracing::info!("{config:#?}");
-
-    let storage = Arc::new(Storage::open(config.storage).await?);
 
     let app = Router::new()
         .route("/transactions", get(get_transactions))
@@ -55,7 +25,7 @@ async fn start() -> Result<()> {
         .route("/info", get(info))
         .layer(Extension(storage));
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
     tracing::info!("Starting server on {addr}");
     let server = axum::Server::bind(&addr).serve(app.into_make_service());

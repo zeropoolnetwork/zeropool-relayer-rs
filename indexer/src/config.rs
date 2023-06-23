@@ -16,6 +16,7 @@ pub enum BackendKind {
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub port: u16,
     pub backend: BackendKind,
     pub storage: zeropool_indexer_tx_storage::Config,
 }
@@ -37,6 +38,7 @@ impl Config {
         };
 
         Ok(Config {
+            port: std::env::var("PORT")?.parse()?,
             backend,
             storage: prefixed_config(STORAGE_NAME)?,
         })

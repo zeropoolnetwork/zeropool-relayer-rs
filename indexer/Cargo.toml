@@ -1,5 +1,5 @@
 [package]
-name = "zeropool-indexer-worker"
+name = "zeropool-indexer"
 version = "0.1.0"
 edition = "2021"
 
@@ -22,6 +22,8 @@ hex = "0.4.3"
 async-trait = "0.1.64"
 serde_json = "1.0.96"
 reqwest = "0.11.17"
+axum = "0.6.2"
+redis = { version = "0.22.1", features = ["tokio-comp"] }
 
 # Backend-specific dependencies
 web3 = { version = "0.18.0", optional = true }
@@ -33,7 +35,7 @@ actix = { version = "0.13.0", optional = true }
 
 
 [features]
-default = ["evm", "near-lake-framework", "near-indexer-framework", "near-archive-node"]
+default = ["evm", "near-lake-framework", "near-archive-node"]
 evm = ["dep:web3"]
 near-indexer-framework = ["dep:near-indexer", "dep:actix"]
 near-lake-framework = ["dep:near-lake-framework"]

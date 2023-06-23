@@ -29,6 +29,10 @@ impl SubstrateBackend {
 
 #[async_trait]
 impl BlockchainBackend for SubstrateBackend {
+    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
+        Ok(())
+    }
+    
     fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }

@@ -1,6 +1,7 @@
 mod backend;
 mod config;
 mod indexer;
+mod json_api;
 
 #[cfg(not(feature = "near-indexer-framework"))]
 #[tokio::main]
@@ -22,8 +23,10 @@ async fn start() {
 
     tracing::info!("{config:#?}");
 
-    let (_storage, indexer_worker, storage_worker) =
+    let (storage, indexer_worker, storage_worker) =
         indexer::start_indexer(config.clone()).await.unwrap();
+
+    let json_api = tokio::spawn(json_api::start(config.port, storage));
 
     tokio::select! {
         res = indexer_worker => {
@@ -31,6 +34,9 @@ async fn start() {
         }
         res = storage_worker => {
             tracing::error!("Storage worker exited unexpectedly: {:?}", res);
+        }
+        res = json_api => {
+            tracing::error!("JSON API exited unexpectedly: {:?}", res);
         }
     }
 }

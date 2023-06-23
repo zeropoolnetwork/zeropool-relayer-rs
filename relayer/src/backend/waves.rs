@@ -50,6 +50,10 @@ impl WavesBackend {
 
 #[async_trait]
 impl BlockchainBackend for WavesBackend {
+    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
+        Ok(())
+    }
+    
     fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use axum::async_trait;
-use near_crypto::{InMemorySigner, SecretKey};
+use near_crypto::InMemorySigner;
 use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::{
@@ -30,13 +30,11 @@ pub struct Config {
 pub struct NearBackend {
     config: Config,
     client: JsonRpcClient,
-    signer: near_crypto::InMemorySigner,
-    // sk: SecretKey,
+    signer: InMemorySigner,
 }
 
 impl NearBackend {
     pub fn new(config: Config) -> Result<Self> {
-        // let sk = SecretKey::from_str(&config.sk)?;
         let client = JsonRpcClient::connect(&config.rpc_url);
         let signer =
             InMemorySigner::from_secret_key(config.relayer_account_id.clone(), config.sk.parse()?);
@@ -45,13 +43,16 @@ impl NearBackend {
             config,
             client,
             signer,
-            // sk,
         })
     }
 }
 
 #[async_trait]
 impl BlockchainBackend for NearBackend {
+    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
+        Ok(())
+    }
+    
     fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }

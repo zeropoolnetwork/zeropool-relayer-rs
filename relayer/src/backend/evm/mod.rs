@@ -63,6 +63,10 @@ impl EvmBackend {
 
 #[async_trait]
 impl BlockchainBackend for EvmBackend {
+    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
+        Ok(())
+    }
+
     fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         // let address = recover(&tx.signature, &tx.hash).unwrap();
         // let balance = self

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tokio::{sync::mpsc, task::JoinHandle};
 use zeropool_indexer_tx_storage::Storage;
+use redis::{AsyncCommands, Client as RedisClient};
 
 use crate::{
     backend::{self, Backend, BackendMethods},
@@ -11,7 +12,7 @@ use crate::{
 
 pub async fn start_indexer(
     config: Config,
-) -> Result<(Arc<Storage>, JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
+) -> Result<(Arc<Storage>, JoinHandle<Result<()>>, JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
     let storage = Arc::new(Storage::open(config.storage).await?);
 
     let latest_tx = storage.latest_tx().await?;
@@ -61,5 +62,22 @@ pub async fn start_indexer(
         Err(anyhow::anyhow!("Storage worker stopped"))
     });
 
-    Ok((storage, indexer_worker, storage_worker))
+
+    // TODO: Extract into a separate module
+    let tx_worker = tokio::spawn(async move {
+        let client = RedisClient::open(url)?;
+        let mut con = client.get_async_connection().await?;
+
+            loop {
+                let Ok(Some((_, data))) = con
+                    .blpop::<_, Option<(String, String)>>("successfull_txs", 0)
+                    .await
+                    else {
+                    continue;
+                };
+            }
+    });
+
+
+    Ok((storage, indexer_worker, storage_worker, tx_worker))
 }

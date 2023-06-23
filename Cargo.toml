@@ -1,15 +1,13 @@
 [workspace]
 members = [
-    "relayer-server",
+    "relayer",
     "indexer-tx-storage",
-    "indexer-worker",
-    "indexer-api",
+    "indexer",
 #    "prover",
 ]
 default-members = [
-    "indexer-worker",
-    "indexer-api",
-    "relayer-server",
+    "indexer",
+    "relayer",
 #    "prover",
 ]
 

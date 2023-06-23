@@ -9126,19 +9126,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "zeropool-indexer-api"
+name = "zeropool-indexer"
 version = "0.1.0"
 dependencies = [
+ "actix",
  "anyhow",
+ "async-trait",
  "axum",
+ "base64 0.21.2",
  "dotenv",
  "envconfig",
  "envy",
+ "futures 0.3.28",
+ "hex 0.4.3",
+ "near-indexer",
+ "near-jsonrpc-primitives",
+ "near-lake-framework",
+ "near-primitives 0.0.0",
+ "num-traits",
+ "redis",
+ "reqwest",
  "serde",
  "serde_json",
+ "syn 1.0.109",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "web3",
  "zeropool-indexer-tx-storage",
 ]
 
@@ -9154,36 +9168,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zeropool-indexer-worker"
-version = "0.1.0"
-dependencies = [
- "actix",
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "dotenv",
- "envconfig",
- "envy",
- "futures 0.3.28",
- "hex 0.4.3",
- "near-indexer",
- "near-jsonrpc-primitives",
- "near-lake-framework",
- "near-primitives 0.0.0",
- "num-traits",
- "reqwest",
- "serde",
- "serde_json",
- "syn 1.0.109",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "web3",
- "zeropool-indexer-tx-storage",
-]
-
-[[package]]
-name = "zeropool-relayer-server"
+name = "zeropool-relayer"
 version = "0.1.0"
 dependencies = [
  "anyhow",

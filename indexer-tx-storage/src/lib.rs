@@ -4,4 +4,5 @@ mod postgres;
 pub use postgres::*;
 pub use tx::*;
 
+mod queue;
 mod tx;
