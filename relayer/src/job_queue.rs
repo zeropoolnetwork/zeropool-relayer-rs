@@ -4,14 +4,14 @@ use anyhow::Result;
 use redis::{AsyncCommands, Client};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::task::JoinHandle;
-use uuid::Uuid;
 
-const JOBS_KEY: &str = "jobs";
-const STATUS_EXPIRE_SECONDS: usize = 60 * 60 * 24; // 24 hours
+const STATUS_EXPIRE_SECONDS: usize = 60 * 60 * 24 * 7; // 1 week
 
 // TODO: Implement a proper job queue/explore limitations of this particular design.
-//       Also, redis or rabbitmq? Redis is not used for anything else, so rabbitmq
-//       might be better.
+//       Also, redis or rabbitmq? Redis is not used for anything else in the project, so rabbitmq
+//       might be preferable.
+
+pub type JobId = u64;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -20,11 +20,12 @@ pub enum JobStatus {
     InProgress,
     Completed,
     Failed,
+    // Cancelled,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Job<D> {
-    pub id: Uuid,
+    pub id: JobId,
     pub data: D,
 }
 
@@ -57,7 +58,7 @@ where
 
             loop {
                 let Ok(Some((_, data))) = con
-                    .blpop::<_, Option<(String, Vec<u8>)>>(JOBS_KEY, 0)
+                    .blpop::<_, Option<(String, Vec<u8>)>>("jobs", 0)
                     .await
                     else {
                     continue;
@@ -99,16 +100,18 @@ where
         Ok(handle)
     }
 
-    pub async fn push(&self, msg: D) -> Result<Uuid> {
+    pub async fn push(&self, msg: D) -> Result<JobId> {
         let mut con = self.client.get_async_connection().await?;
-        let job_id = Uuid::new_v4();
+
+        let job_id = con.incr("job_counter", 1).await?;
+
         let job = Job {
             id: job_id,
             data: msg,
         };
 
         let data = bincode::serialize(&job)?;
-        con.rpush(JOBS_KEY, &[data]).await?;
+        con.rpush("jobs", &[data]).await?;
 
         con.set_ex(
             format!("job:{job_id}"),
@@ -117,10 +120,36 @@ where
         )
         .await?;
 
+        tracing::debug!("New job {}", job_id);
+
         Ok(job_id)
     }
 
-    pub async fn job_status(&self, job_id: Uuid) -> Result<Option<JobStatus>> {
+    pub async fn wait(&self, job_id: JobId) -> Result<()> {
+        let mut con = self.client.get_async_connection().await?;
+
+        loop {
+            let status: Option<Vec<u8>> = con.get(format!("job:{job_id}")).await?;
+
+            match status {
+                Some(status) => {
+                    let status: JobStatus = bincode::deserialize(&status)?;
+                    match status {
+                        JobStatus::Completed => return Ok(()),
+                        JobStatus::Failed => anyhow::bail!("Job failed"),
+                        JobStatus::Pending | JobStatus::InProgress => {
+                            // TODO: use pub/sub?
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                            continue;
+                        }
+                    }
+                }
+                None => anyhow::bail!("Job not found"),
+            }
+        }
+    }
+
+    pub async fn job_status(&self, job_id: JobId) -> Result<Option<JobStatus>> {
         let mut con = self.client.get_async_connection().await?;
         let status: Option<Vec<u8>> = con.get(format!("job:{job_id}")).await?;
 
@@ -130,17 +159,13 @@ where
         }
     }
 
-    pub async fn set_extra<E: Serialize>(&self, job_id: Uuid, extra: E) -> Result<()> {
+    pub async fn add_job_mapping<T: ToString>(&self, job_id: JobId, key: T) -> Result<()> {
         let mut con = self.client.get_async_connection().await?;
-        let status: Option<Vec<u8>> = con.get(format!("job:{job_id}")).await?;
-
-        if status.is_none() {
-            anyhow::bail!("Job not found")
-        }
+        let key = key.to_string();
 
         con.set_ex(
-            format!("job:{job_id}:extra"),
-            bincode::serialize(&extra)?,
+            format!("job_mapping:{key}"),
+            bincode::serialize(&job_id)?,
             STATUS_EXPIRE_SECONDS,
         )
         .await?;
@@ -148,14 +173,40 @@ where
         Ok(())
     }
 
-    pub async fn get_extra<E: DeserializeOwned>(&self, job_id: Uuid) -> Result<Option<E>> {
+    pub async fn get_job_mapping<T: ToString>(&self, key: T) -> Result<Option<JobId>> {
         let mut con = self.client.get_async_connection().await?;
-        let extra: Option<Vec<u8>> = con.get(format!("job:{job_id}:extra")).await?;
+        let key = key.to_string();
 
-        match extra {
-            Some(extra) => Ok(Some(bincode::deserialize(&extra)?)),
+        let job_id: Option<Vec<u8>> = con.get(format!("job_mapping:{key}")).await?;
+
+        match job_id {
+            Some(job_id) => Ok(Some(bincode::deserialize(&job_id)?)),
             None => Ok(None),
         }
+    }
+
+    pub async fn cancel_jobs_after(&self, job_id: JobId) -> Result<()> {
+        let mut con = self.client.get_async_connection().await?;
+
+        let job_ids: Vec<JobId> = con
+            .lrange::<_, Vec<Vec<u8>>>("jobs", 0, -1)
+            .await?
+            .into_iter()
+            .map(|data| bincode::deserialize(&data).map_err(Into::into))
+            .collect::<Result<_>>()?;
+
+        for id in job_ids {
+            if id > job_id {
+                con.set_ex(
+                    format!("job:{id}"),
+                    bincode::serialize(&JobStatus::Failed)?,
+                    STATUS_EXPIRE_SECONDS,
+                )
+                .await?;
+            }
+        }
+
+        Ok(())
     }
 }
 

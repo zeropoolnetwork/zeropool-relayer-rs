@@ -12,19 +12,6 @@ pub struct ProofWithInputs {
     pub inputs: Vec<Num<Fr>>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TxDataRequest {
-    pub tx_type: TxType,
-    pub proof: ProofWithInputs,
-    #[serde(with = "hex")]
-    pub memo: Vec<u8>,
-    #[serde(with = "hex")]
-    pub extra_data: Vec<u8>,
-    // #[serde(default)]
-    // pub sync: bool,
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, thiserror::Error)]
 #[serde(rename_all = "snake_case")]
 pub enum TxValidationError {

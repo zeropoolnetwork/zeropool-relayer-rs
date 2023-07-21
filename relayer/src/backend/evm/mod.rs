@@ -15,7 +15,7 @@ use web3::{
 use zeropool_tx::TxData;
 
 use crate::{
-    backend::{BlockchainBackend, TxHash},
+    backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
     Engine,
 };
@@ -63,8 +63,8 @@ impl EvmBackend {
 
 #[async_trait]
 impl BlockchainBackend for EvmBackend {
-    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
-        Ok(())
+    async fn init_state(&self) -> Result<Vec<TxCalldata>> {
+        Ok(vec![])
     }
 
     fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {

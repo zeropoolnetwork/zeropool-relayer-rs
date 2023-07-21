@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 use zeropool_tx::TxData;
 
 use crate::{
-    backend::{BlockchainBackend, TxHash},
+    backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
     Engine,
 };
@@ -23,23 +23,18 @@ impl MockBackend {
 
 #[async_trait]
 impl BlockchainBackend for MockBackend {
-    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
-        Ok(())
+    async fn init_state(&self) -> Result<Vec<TxCalldata>> {
+        Ok(vec![])
     }
-    
+
     fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
-        // let address = recover(&tx.signature, &tx.hash).unwrap();
-        // let balance = self
-        //     .token
-        //     .query("balanceOf", tx.sender, None, Options::default(), None);
-        // TODO: Check the balance of the sender for deposits.
         vec![]
     }
 
     /// Sign and send a transaction to the blockchain.
     async fn send_tx(&self, _tx: TxData<Engine>) -> Result<TxHash> {
         let mut pool_index = self.pool_index.lock().await;
-        *pool_index += 1;
+        *pool_index += 128;
         Ok(pool_index.to_be_bytes().to_vec())
     }
 

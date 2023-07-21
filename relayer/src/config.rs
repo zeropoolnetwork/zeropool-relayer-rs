@@ -20,7 +20,6 @@ pub struct Config {
     pub indexer_url: String,
     pub fee: u64,
     pub mock_prover: bool,
-    pub mock_indexer: bool,
 }
 
 impl Config {
@@ -44,9 +43,6 @@ impl Config {
             indexer_url: std::env::var("INDEXER_URL")?,
             fee: std::env::var("FEE")?.parse()?,
             mock_prover: std::env::var("MOCK_PROVER")
-                .map(|var| var.parse::<bool>())
-                .unwrap_or(Ok(false))?,
-            mock_indexer: std::env::var("MOCK_INDEXER")
                 .map(|var| var.parse::<bool>())
                 .unwrap_or(Ok(false))?,
             backend,

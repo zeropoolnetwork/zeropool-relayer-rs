@@ -17,7 +17,7 @@ pub mod waves;
 
 #[async_trait]
 pub trait BlockchainBackend: Sync + Send {
-    async fn init_state(&mut self, staring_block: u64) -> Result<()>;
+    async fn init_state(&self) -> Result<Vec<TxCalldata>>;
 
     /// Validate transaction data.
     fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError>;
@@ -36,3 +36,8 @@ pub trait BlockchainBackend: Sync + Send {
 }
 
 pub type TxHash = Vec<u8>;
+
+pub struct TxCalldata {
+    pub hash: TxHash,
+    pub calldata: Vec<u8>,
+}

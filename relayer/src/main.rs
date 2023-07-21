@@ -14,14 +14,12 @@ pub type Engine = Bn256;
 
 mod backend;
 mod config;
-mod indexer;
 mod job_queue;
 mod json_api;
 mod merkle_tree;
 mod state;
 mod tx;
 mod tx_storage;
-mod utils;
 mod worker;
 
 #[tokio::main]

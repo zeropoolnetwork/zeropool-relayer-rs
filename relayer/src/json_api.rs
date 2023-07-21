@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use byteorder::{BigEndian, ReadBytesExt};
@@ -13,14 +14,13 @@ use libzeropool_rs::libzeropool::native::tx::parse_delta;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
-use tracing::instrument;
-use uuid::Uuid;
 use zeropool_tx::TxType;
 
 use crate::{
     job_queue::JobStatus,
     state::AppState,
-    tx::{ParsedTxData, TxDataRequest, TxValidationError},
+    tx::{ParsedTxData, ProofWithInputs, TxValidationError},
+    worker::prepare_job,
 };
 
 pub fn routes(ctx: Arc<AppState>) -> Router {
@@ -30,7 +30,7 @@ pub fn routes(ctx: Arc<AppState>) -> Router {
             get(get_transactions).post(create_transaction),
         )
         // For compatibility with old API
-        // .route("/sendTransactions", post(send_transactions))
+        .route("/sendTransactions", post(create_transaction_legacy))
         .route("/job/:id", get(job))
         .route("/info", get(info))
         .layer(TraceLayer::new_for_http())
@@ -46,14 +46,26 @@ pub struct TxPaginationQuery {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateTransactionResponse {
-    pub job_id: Uuid,
+    pub job_id: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TxDataRequest {
+    pub tx_type: TxType,
+    pub proof: ProofWithInputs,
+    #[serde(with = "hex")]
+    pub memo: Vec<u8>,
+    #[serde(with = "hex")]
+    pub extra_data: Vec<u8>,
+    // #[serde(default)]
+    // pub sync: bool,
 }
 
 async fn create_transaction(
     State(state): State<Arc<AppState>>,
     Json(tx_data): Json<TxDataRequest>,
 ) -> AppResult<Json<CreateTransactionResponse>> {
-    tracing::info!("Received transaction");
     let mut validation_errors = Vec::new();
 
     validation_errors.extend(validate_tx(&tx_data, state.as_ref()).await);
@@ -74,46 +86,44 @@ async fn create_transaction(
         return Err(AppError::TxValidationErrors(validation_errors));
     }
 
-    let job_id = state.job_queue.push(tx).await?;
+    // TODO: Modify state before creating a job
+    // let job_data = prepare_job(tx);
+
+    let payload = prepare_job(tx, state.clone()).await?;
+    let job_id = state.job_queue.push(payload).await?;
 
     Ok(Json(CreateTransactionResponse { job_id }))
 }
 
-// async fn create_transactions(
-//     State(state): State<Arc<AppState>>,
-//     Json(txs): Json<Vec<TxDataRequest>>,
-// ) -> AppResult<Json<CreateTransactionResponse>> {
-//     tracing::info!("Received transaction");
-//
-//     let mut validation_errors = Vec::new();
-//     for tx in &txs {
-//         validation_errors.extend(validate_tx(&tx, state.as_ref()).await);
-//     }
-//
-//     let txs = txs
-//         .into_iter()
-//         .map(|tx_data| ParsedTxData {
-//             tx_type: tx_data.tx_type,
-//             proof: tx_data.proof.proof,
-//             delta: tx_data.proof.inputs[3],
-//             out_commit: tx_data.proof.inputs[2],
-//             nullifier: tx_data.proof.inputs[1],
-//             memo: tx_data.memo,
-//             extra_data: tx_data.extra_data,
-//         })
-//         .collect::<Vec<_>>();
-//
-//     if !validation_errors.is_empty() {
-//         return Err(AppError::TxValidationErrors(validation_errors));
-//     }
-//
-//     let job_id = state.job_queue.push(tx).await?;
-//
-//     Ok(Json(CreateTransactionResponse { job_id }))
-// }
+#[derive(Serialize, Deserialize)]
+struct TxDataRequestLegacy(Vec<TxDataRequest>);
+
+/// Legacy API compatibility
+async fn create_transaction_legacy(
+    state: State<Arc<AppState>>,
+    Json(tx_data): Json<TxDataRequestLegacy>,
+) -> AppResult<Json<CreateTransactionResponse>> {
+    if tx_data.0.len() > 1 {
+        return Err(AppError::BadRequest(anyhow!(
+            "Can only process one transaction at a time"
+        )));
+    }
+
+    let tx_data = tx_data
+        .0
+        .into_iter()
+        .next()
+        .ok_or(AppError::BadRequest(anyhow!(
+            "No transaction data provided"
+        )))?;
+
+    create_transaction(state, Json(tx_data)).await
+}
 
 async fn validate_tx(tx: &TxDataRequest, state: &AppState) -> Vec<TxValidationError> {
     let mut errors = Vec::new();
+
+    // TODO: Cache nullifiers
 
     if !verify(&state.transfer_vk, &tx.proof.proof, &tx.proof.inputs) {
         errors.push(TxValidationError::InvalidTransferProof);
@@ -179,7 +189,7 @@ async fn get_transactions(
     let pool_index = *state.pool_index.read().await;
 
     let txs = state
-        .tx_storage
+        .transactions
         .iter_range(offset..(offset + limit * 128))?
         .map(|res| {
             res.map(|(index, data)| {
@@ -202,7 +212,7 @@ struct JobStatusResponse {
 
 async fn job(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<Uuid>,
+    Path(id): Path<u64>,
 ) -> AppResult<Json<JobStatusResponse>> {
     let state = state.job_queue.job_status(id).await?;
 
@@ -213,24 +223,33 @@ async fn job(
     Ok(Json(JobStatusResponse { state }))
 }
 
-#[instrument]
-async fn info() -> impl IntoResponse {
-    #[derive(Serialize)]
-    struct InfoResponse {
-        name: String,
-        version: String,
-    }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InfoResponse {
+    api_version: String,
+    root: String,
+    optimistic_root: String,
+    delta_index: String,
+    optimistic_delta_index: String,
+}
 
-    Json(InfoResponse {
-        name: "relayer".to_string(),
-        version: "0.1.0".to_string(),
-    })
+async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse>> {
+    let pool_index = *state.pool_index.read().await;
+
+    Ok(Json(InfoResponse {
+        api_version: "2".to_owned(),
+        root: "1".to_owned(),
+        optimistic_root: "1".to_owned(),
+        delta_index: pool_index.to_string(),
+        optimistic_delta_index: "1".to_owned(),
+    }))
 }
 
 type AppResult<T> = Result<T, AppError>;
 
 enum AppError {
     NotFound,
+    BadRequest(anyhow::Error),
     TxValidationErrors(Vec<TxValidationError>),
     InternalServerError(anyhow::Error),
 }
@@ -260,6 +279,16 @@ impl IntoResponse for AppError {
                     Json(json!({
                         "error": "Validation error",
                         "errors": errors,
+                    })),
+                )
+                    .into_response()
+            }
+            Self::BadRequest(err) => {
+                tracing::warn!("Bad request: {err}");
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": err.to_string(),
                     })),
                 )
                     .into_response()

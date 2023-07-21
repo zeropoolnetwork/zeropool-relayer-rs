@@ -18,52 +18,45 @@ use serde::{Deserialize, Serialize};
 use zeropool_tx::TxData;
 
 use crate::{
-    backend::BlockchainBackend,
     job_queue::{Job, JobQueue},
     state::AppState,
     tx::ParsedTxData,
+    Fr,
 };
 
-pub type Payload = ParsedTxData;
+const OUTPLUSONE: u64 = constants::OUT as u64 + 1;
+
+#[derive(Serialize, Deserialize)]
+pub struct Payload {
+    tx: ParsedTxData,
+    tree_pub: TreePub<Fr>,
+    tree_sec: TreeSec<Fr>,
+    next_commit_index: u64,
+    prev_commit_index: u64,
+}
 
 pub type WorkerJobQueue = JobQueue<Payload, AppState>;
 
-#[derive(Serialize, Deserialize)]
-pub struct TxMeta {
-    tx_hash: Vec<u8>,
-}
-
-// TODO: Thoroughly check for race conditions. This might be a mine field, considering that
-//       process_job runs in parallel.
-#[tracing::instrument(skip_all, fields(job_id = %job.id))]
-pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
-    const OUTPLUSONE: u64 = constants::OUT as u64 + 1;
-
-    let tx = job.data;
+pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload> {
     let tree = ctx.tree.write().await;
     let root_before = tree.root()?;
-    let next_commit_index = tree.num_leaves() * OUTPLUSONE;
-    let prev_commit_index = next_commit_index.saturating_sub(OUTPLUSONE);
+    let next_commit_index = tree.num_leaves();
+    let prev_commit_index = next_commit_index.saturating_sub(1);
 
-    // Update the tree and tx storage
+    // Modify state, if something goes wrong later, we'll rollback.
     tree.add_leaf(tx.out_commit)?;
-
-    ctx.tx_storage.set(
-        *ctx.pool_index.read().await,
+    ctx.transactions.set(
+        next_commit_index * OUTPLUSONE,
         tx.out_commit,
         &vec![0; 32],
         &tx.memo,
     )?;
 
+    // Prepare the data for the prover.
     let root_after = tree.root()?;
     let proof_filled = tree.zp_merkle_proof(prev_commit_index)?;
     let proof_free = tree.zp_merkle_proof(next_commit_index)?;
-
-    let prev_leaf =
-        tree.get_node_with_default(constants::OUTPLUSONELOG as u64, prev_commit_index)?;
-
-    // Let the other tasks start
-    drop(tree);
+    let prev_leaf = tree.leaf(prev_commit_index)?;
 
     let tree_pub = TreePub {
         root_before,
@@ -76,6 +69,33 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         prev_leaf,
     };
 
+    Ok(Payload {
+        tx,
+        tree_pub,
+        tree_sec,
+        next_commit_index,
+        prev_commit_index,
+    })
+}
+
+// TODO: Thoroughly check for race conditions. This might be a mine field, considering that
+//       process_job runs in parallel.
+
+// TODO: Check the transaction index, if it's not the next one, wait for other jobs to finish. (?)
+#[tracing::instrument(skip_all, fields(job_id = %job.id))]
+pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
+    let Payload {
+        tx,
+        tree_pub,
+        tree_sec,
+        next_commit_index,
+        prev_commit_index,
+    } = job.data;
+
+    ctx.job_queue
+        .add_job_mapping(job.id, next_commit_index)
+        .await?;
+
     let root_after = tree_pub.root_after;
 
     let tree_proof = if ctx.config.mock_prover {
@@ -87,7 +107,13 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         }
     } else {
         tracing::debug!("Proving tree");
-        prove_tree(&ctx.tree_params, &*POOL_PARAMS, tree_pub, tree_sec).1
+        let ctx = ctx.clone();
+        let proof = tokio::task::spawn_blocking(move || {
+            prove_tree(&ctx.tree_params, &*POOL_PARAMS, tree_pub, tree_sec).1
+        })
+        .await?;
+        tracing::info!("Tree proof complete");
+        proof
     };
 
     let full_tx = TxData {
@@ -109,11 +135,10 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         Err(e) => {
             tracing::error!("Failed to send tx: {:#?}", e);
 
-            // TODO: Rollback to prev_commit_index or pool_index? pool_index might be easier.
-            // let pool_index = *ctx.pool_index.read().await;
+            // TODO: Invalidate all jobs that were sent after this one.
 
             tracing::debug!("Rolling back tx storage to {prev_commit_index}");
-            ctx.tx_storage.rollback(prev_commit_index)?;
+            ctx.transactions.rollback(prev_commit_index)?;
             ctx.tree.write().await.rollback(prev_commit_index)?;
             tracing::debug!("Rollback complete");
 
@@ -121,17 +146,20 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         }
     };
 
-    ctx.tx_storage.set(
-        *ctx.pool_index.read().await,
+    tracing::info!(
+        "Transaction successfully sent ({}). Updating permanent state...",
+        ctx.backend.format_hash(&tx_hash)
+    );
+
+    // Update transaction with hash
+    ctx.transactions.set(
+        next_commit_index * OUTPLUSONE,
         tx.out_commit,
         &tx_hash,
         &tx.memo,
     )?;
 
-    tracing::info!("Sent tx with hash: {}", ctx.backend.format_hash(&tx_hash));
-
-    ctx.job_queue.set_extra(job.id, TxMeta { tx_hash }).await?;
-    *ctx.pool_index.write().await = next_commit_index;
+    *ctx.pool_index.write().await += OUTPLUSONE;
 
     Ok(())
 }

@@ -12,7 +12,7 @@ use waves_rust::{
 use zeropool_tx::TxData;
 
 use crate::{
-    backend::{BlockchainBackend, TxHash},
+    backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
     Engine,
 };
@@ -50,10 +50,10 @@ impl WavesBackend {
 
 #[async_trait]
 impl BlockchainBackend for WavesBackend {
-    async fn init_state(&mut self, _staring_block: u64) -> Result<()> {
-        Ok(())
+    async fn init_state(&self) -> Result<Vec<TxCalldata>> {
+        Ok(vec![])
     }
-    
+
     fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }

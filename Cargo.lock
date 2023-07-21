@@ -9169,7 +9169,7 @@ dependencies = [
 
 [[package]]
 name = "zeropool-relayer"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -9208,7 +9208,6 @@ dependencies = [
  "uuid",
  "waves-rust",
  "web3",
- "zeropool-indexer-tx-storage",
  "zeropool-tx",
 ]
 

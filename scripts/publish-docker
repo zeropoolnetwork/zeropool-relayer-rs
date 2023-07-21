@@ -38,7 +38,6 @@ function build_and_push() {
   docker push $USERNAME/$IMAGE:latest
 }
 
-#build_and_push indexer-api
-#build_and_push indexer-worker near-framework "near,near-indexer-framework"
-#build_and_push indexer-worker
-build_and_push relayer-server
+#build_and_push indexer near-framework "near,near-indexer-framework"
+#build_and_push indexer
+build_and_push relayer

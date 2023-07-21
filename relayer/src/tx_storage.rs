@@ -31,6 +31,11 @@ impl TxStorage {
         Ok(Self { db })
     }
 
+    pub fn clear_and_open(path: &str) -> Result<Self> {
+        std::fs::remove_file(&path)?;
+        Self::open(path)
+    }
+
     pub fn set(
         &self,
         index: Index,
