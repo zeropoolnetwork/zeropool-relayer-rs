@@ -17,7 +17,8 @@ pub mod waves;
 
 #[async_trait]
 pub trait BlockchainBackend: Sync + Send {
-    async fn init_state(&self) -> Result<Vec<TxCalldata>>;
+    /// Fetch latest uncached transactions from the blockchain.
+    async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>>;
 
     /// Validate transaction data.
     fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError>;
@@ -27,6 +28,7 @@ pub trait BlockchainBackend: Sync + Send {
 
     /// Fetch the current pool index from the blockchain.
     async fn get_pool_index(&self) -> Result<u64>;
+
     // async fn get_merkle_root(&self) -> Result<Vec<u8>>;
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>>;

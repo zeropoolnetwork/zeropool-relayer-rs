@@ -24,8 +24,8 @@ mod worker;
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
+    dotenv::dotenv().ok();
 
     let config = Config::init().unwrap();
     tracing::info!("{config:#?}");

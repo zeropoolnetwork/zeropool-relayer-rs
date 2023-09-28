@@ -52,7 +52,7 @@ impl NearBackend {
 
 #[async_trait]
 impl BlockchainBackend for NearBackend {
-    async fn init_state(&self) -> Result<Vec<TxCalldata>> {
+    async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>> {
         const PAGE_SIZE: u64 = 25;
 
         #[derive(Deserialize)]

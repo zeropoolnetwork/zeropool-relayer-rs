@@ -63,7 +63,7 @@ impl EvmBackend {
 
 #[async_trait]
 impl BlockchainBackend for EvmBackend {
-    async fn init_state(&self) -> Result<Vec<TxCalldata>> {
+    async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>> {
         Ok(vec![])
     }
 

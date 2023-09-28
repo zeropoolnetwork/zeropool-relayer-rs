@@ -1,12 +1,10 @@
 [workspace]
+resolver = "2"
 members = [
     "relayer",
-    "indexer-tx-storage",
-    "indexer",
 #    "prover",
 ]
 default-members = [
-    "indexer",
     "relayer",
 #    "prover",
 ]

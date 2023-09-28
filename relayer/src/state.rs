@@ -38,6 +38,8 @@ impl AppState {
             BackendKind::Evm(config) => Arc::new(crate::backend::evm::EvmBackend::new(config)?),
             #[cfg(feature = "near_backend")]
             BackendKind::Near(config) => Arc::new(crate::backend::near::NearBackend::new(config)?),
+            #[cfg(feature = "waves_backend")]
+            BackendKind::Waves(config) => Arc::new(crate::backend::waves::WavesBackend::new(config).await?),
             _ => todo!("Backend unimplemented"),
         };
 
@@ -61,7 +63,7 @@ impl AppState {
 
         if relayer_index < pool_index {
             tracing::info!("Fetching transactions...");
-            let all_txs = backend.init_state().await?;
+            let all_txs = backend.fetch_latest_transactions().await?;
             tracing::info!(
                 "Fetched {} transactions, initializing state...",
                 all_txs.len()
