@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use fawkes_crypto::backend::bellman_groth16::{
     group::{G1Point, G2Point},
     prover::Proof,
@@ -26,7 +26,7 @@ use crate::{
 
 const OUTPLUSONE: u64 = constants::OUT as u64 + 1;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Payload {
     tx: ParsedTxData,
     tree_pub: TreePub<Fr>,
@@ -37,6 +37,8 @@ pub struct Payload {
 
 pub type WorkerJobQueue = JobQueue<Payload, AppState>;
 
+/// Does as much as possible before creating a job in order to guarantee that the optimistic state
+/// is updated by the time a user receives a response.
 pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload> {
     let tree = ctx.tree.write().await;
     let root_before = tree.root()?;
@@ -78,10 +80,22 @@ pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload
     })
 }
 
+#[tracing::instrument(skip_all, fields(job_id = %job.id))]
+pub async fn process_failure(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
+    let prev_commit_index = job.data.prev_commit_index;
+
+    tracing::debug!("Rolling back tx storage to {prev_commit_index}");
+    ctx.transactions.rollback(prev_commit_index)?;
+    ctx.tree.write().await.rollback(prev_commit_index)?;
+    ctx.job_queue.cancel_jobs_after(job.id).await?;
+    tracing::debug!("Rollback complete");
+
+    Ok(())
+}
+
 // TODO: Thoroughly check for race conditions. This might be a mine field, considering that
 //       process_job runs in parallel.
 
-// TODO: Check the transaction index, if it's not the next one, wait for other jobs to finish. (?)
 #[tracing::instrument(skip_all, fields(job_id = %job.id))]
 pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     let Payload {
@@ -89,7 +103,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         tree_pub,
         tree_sec,
         next_commit_index,
-        prev_commit_index,
+        ..
     } = job.data;
 
     ctx.job_queue
@@ -130,18 +144,25 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     };
 
     tracing::info!("Sending tx");
+
+    // TODO: Use a separate ordered queue for sending transactions?
+    loop {
+        if ctx.job_queue.is_job_cancelled(job.id).await? {
+            tracing::info!("Job cancelled, skipping tx");
+            return Err(anyhow!("Job cancelled"));
+        }
+
+        // Wait until the preceding transactions are executed.
+        let pool_index = *ctx.pool_index.read().await;
+        if pool_index == next_commit_index * OUTPLUSONE {
+            break;
+        }
+    }
+
     let tx_hash = match ctx.backend.send_tx(full_tx).await {
         Ok(tx_hash) => tx_hash,
         Err(e) => {
             tracing::error!("Failed to send tx: {:#?}", e);
-
-            // TODO: Invalidate all jobs that were sent after this one.
-
-            tracing::debug!("Rolling back tx storage to {prev_commit_index}");
-            ctx.transactions.rollback(prev_commit_index)?;
-            ctx.tree.write().await.rollback(prev_commit_index)?;
-            tracing::debug!("Rollback complete");
-
             return Err(e);
         }
     };

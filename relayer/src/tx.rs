@@ -1,3 +1,4 @@
+use fawkes_crypto::backend::bellman_groth16::group::{G1Point, G2Point};
 use libzeropool_rs::libzeropool::fawkes_crypto::{
     backend::bellman_groth16::prover::Proof, ff_uint::Num,
 };
@@ -39,4 +40,25 @@ pub struct ParsedTxData {
     pub nullifier: Num<Fr>,
     pub memo: Vec<u8>,
     pub extra_data: Vec<u8>,
+}
+
+impl Clone for ParsedTxData {
+    fn clone(&self) -> Self {
+        Self {
+            tx_type: self.tx_type,
+            proof: Proof {
+                a: G1Point(self.proof.a.0, self.proof.a.1),
+                b: G2Point(
+                    (self.proof.b.0 .0, self.proof.b.0 .1),
+                    (self.proof.b.1 .0, self.proof.b.1 .1),
+                ),
+                c: G1Point(self.proof.c.0, self.proof.c.1),
+            },
+            delta: self.delta.clone(),
+            out_commit: self.out_commit.clone(),
+            nullifier: self.nullifier.clone(),
+            memo: self.memo.clone(),
+            extra_data: self.extra_data.clone(),
+        }
+    }
 }

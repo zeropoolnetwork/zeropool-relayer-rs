@@ -13,7 +13,7 @@ const STATUS_EXPIRE_SECONDS: usize = 60 * 60 * 24 * 7; // 1 week
 
 pub type JobId = u64;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
     Pending,
@@ -23,7 +23,7 @@ pub enum JobStatus {
     // Cancelled,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Job<D> {
     pub id: JobId,
     pub data: D,
@@ -36,7 +36,7 @@ pub struct JobQueue<D, C> {
 
 impl<D, C> JobQueue<D, C>
 where
-    D: Serialize + DeserializeOwned + Send + 'static,
+    D: Clone + Serialize + DeserializeOwned + Send + 'static,
     C: Send + Sync + 'static,
 {
     pub fn new(url: &str) -> Result<Self> {
@@ -47,20 +47,26 @@ where
         })
     }
 
-    pub fn start<F, Fut>(&self, ctx: Arc<C>, f: F) -> Result<JoinHandle<Result<()>>>
+    pub fn start<F, ErrF, Fut, ErrFut>(
+        &self,
+        ctx: Arc<C>,
+        f: F,
+        err_f: ErrF,
+    ) -> Result<JoinHandle<Result<()>>>
     where
         Fut: Future<Output = Result<()>> + Send + 'static,
+        ErrFut: Future<Output = Result<()>> + Send + 'static,
         F: Fn(Job<D>, Arc<C>) -> Fut + Send + Sync + 'static,
+        ErrF: Fn(Job<D>, Arc<C>) -> ErrFut + Send + Sync + 'static,
     {
         let client = self.client.clone();
         let handle = tokio::spawn(async move {
             let mut con = client.get_async_connection().await?;
 
             loop {
-                let Ok(Some((_, data))) = con
-                    .blpop::<_, Option<(String, Vec<u8>)>>("jobs", 0)
-                    .await
-                    else {
+                let Ok(Some((_, data))) =
+                    con.blpop::<_, Option<(String, Vec<u8>)>>("jobs", 0).await
+                else {
                     continue;
                 };
 
@@ -74,7 +80,7 @@ where
                 )
                 .await?;
 
-                match f(job, ctx.clone()).await {
+                match f(job.clone(), ctx.clone()).await {
                     Ok(_) => {
                         con.set_ex(
                             format!("job:{job_id}"),
@@ -85,6 +91,8 @@ where
                         tracing::info!("Job {} done", job_id);
                     }
                     Err(e) => {
+                        err_f(job, ctx.clone()).await?;
+
                         con.set_ex(
                             format!("job:{job_id}"),
                             bincode::serialize(&JobStatus::Failed)?,
@@ -156,6 +164,19 @@ where
         match status {
             Some(status) => Ok(Some(bincode::deserialize(&status)?)),
             None => Ok(None),
+        }
+    }
+
+    pub async fn is_job_cancelled(&self, job_id: JobId) -> Result<bool> {
+        let mut con = self.client.get_async_connection().await?;
+        let status: Option<Vec<u8>> = con.get(format!("job:{job_id}")).await?;
+
+        match status {
+            Some(status) => {
+                let status: JobStatus = bincode::deserialize(&status)?;
+                Ok(status == JobStatus::Failed)
+            }
+            None => Ok(false),
         }
     }
 

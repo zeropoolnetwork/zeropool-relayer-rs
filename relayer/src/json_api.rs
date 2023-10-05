@@ -20,7 +20,7 @@ use crate::{
     job_queue::JobStatus,
     state::AppState,
     tx::{ParsedTxData, ProofWithInputs, TxValidationError},
-    worker::prepare_job,
+    tx_worker::prepare_job,
 };
 
 pub fn routes(ctx: Arc<AppState>) -> Router {

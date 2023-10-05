@@ -17,10 +17,11 @@ mod config;
 mod job_queue;
 mod json_api;
 mod merkle_tree;
+mod send_worker;
 mod state;
 mod tx;
 mod tx_storage;
-mod worker;
+mod tx_worker;
 
 #[tokio::main]
 async fn main() {
@@ -35,7 +36,11 @@ async fn main() {
     let ctx = Arc::new(AppState::init(config).await.unwrap());
     let worker_handle = ctx
         .job_queue
-        .start(ctx.clone(), worker::process_job)
+        .start(
+            ctx.clone(),
+            tx_worker::process_job,
+            tx_worker::process_failure,
+        )
         .unwrap();
 
     tracing::info!("Starting server on {addr}");

@@ -11,7 +11,7 @@ use crate::{
     job_queue::JobQueue,
     merkle_tree::MerkleTree,
     tx_storage::TxStorage,
-    worker::{Payload, WorkerJobQueue},
+    tx_worker::{Payload, WorkerJobQueue},
     Engine,
 };
 
@@ -39,7 +39,9 @@ impl AppState {
             #[cfg(feature = "near_backend")]
             BackendKind::Near(config) => Arc::new(crate::backend::near::NearBackend::new(config)?),
             #[cfg(feature = "waves_backend")]
-            BackendKind::Waves(config) => Arc::new(crate::backend::waves::WavesBackend::new(config).await?),
+            BackendKind::Waves(config) => {
+                Arc::new(crate::backend::waves::WavesBackend::new(config).await?)
+            }
             _ => todo!("Backend unimplemented"),
         };
 
