@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use fawkes_crypto::backend::bellman_groth16::verifier::VK;
 use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     backend::BlockchainBackend,
@@ -20,7 +20,7 @@ const TX_INDEX_STRIDE: usize = libzeropool_rs::libzeropool::constants::OUT + 1;
 pub struct AppState {
     pub config: Config,
     pub transactions: TxStorage,
-    pub tree: RwLock<MerkleTree>,
+    pub tree: Mutex<MerkleTree>, // TODO: Use mutex?
     pub job_queue: JobQueue<Payload, AppState>,
     pub backend: Arc<dyn BlockchainBackend>,
     pub pool_index: RwLock<u64>,
@@ -100,7 +100,7 @@ impl AppState {
             transactions,
             job_queue,
             backend,
-            tree: RwLock::new(tree),
+            tree: Mutex::new(tree),
             pool_index: RwLock::new(pool_index),
             fee,
             transfer_vk,

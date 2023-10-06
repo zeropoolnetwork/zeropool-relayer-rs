@@ -40,7 +40,7 @@ pub type WorkerJobQueue = JobQueue<Payload, AppState>;
 /// Does as much as possible before creating a job in order to guarantee that the optimistic state
 /// is updated by the time a user receives a response.
 pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload> {
-    let tree = ctx.tree.write().await;
+    let tree = ctx.tree.lock().await;
     let root_before = tree.root()?;
     let next_commit_index = tree.num_leaves();
     let prev_commit_index = next_commit_index.saturating_sub(1);
@@ -86,7 +86,7 @@ pub async fn process_failure(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()
 
     tracing::debug!("Rolling back tx storage to {prev_commit_index}");
     ctx.transactions.rollback(prev_commit_index)?;
-    ctx.tree.write().await.rollback(prev_commit_index)?;
+    ctx.tree.lock().await.rollback(prev_commit_index)?;
     ctx.job_queue.cancel_jobs_after(job.id).await?;
     tracing::debug!("Rollback complete");
 

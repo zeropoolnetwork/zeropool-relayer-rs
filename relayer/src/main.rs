@@ -17,7 +17,6 @@ mod config;
 mod job_queue;
 mod json_api;
 mod merkle_tree;
-mod send_worker;
 mod state;
 mod tx;
 mod tx_storage;
