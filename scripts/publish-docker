@@ -1,43 +1,16 @@
 #!/usr/bin/env bash
 
-# TODO: Versioning
 
 USERNAME=voidxnull
+IMAGE=zeropool-relayer
 
+VERSION=$(cargo metadata --format-version 1 | jq -r ".packages[] | select(.name==\"zeropool-relayer\") | .version")
+LATEST_IMAGE=$USERNAME/$IMAGE:latest
+VERSIONED_IMAGE=$USERNAME/$IMAGE:$VERSION
 
+echo "Publishing $LATEST_IMAGE and $VERSIONED_IMAGE"
 
-
-#cd indexer-tx-storage && \
-#cargo sqlx prepare && \
-#cd - || exit
-
-function get_version() {
-  local PACKAGE=$1
-  local VERSION=$(cargo metadata --format-version 1 | jq -r ".packages[] | select(.name==\"$PACKAGE\") | .version")
-  echo $VERSION
-}
-
-# $1 = package
-# $2 = suffix
-# $3 = features
-function build_and_push() {
-  local IMAGE=zeropool-$1
-  if [ -n "$2" ]; then
-      IMAGE=$IMAGE-$2
-  fi
-  local BINARY_NAME=zeropool-$1
-  local BINARY_MASK=${BINARY_NAME//-/_}
-
-  echo "Building $USERNAME/$IMAGE"
-
-  docker build -f ./docker/Dockerfile -t $USERNAME/$IMAGE:latest \
-    --build-arg PACKAGE="$1" \
-    --build-arg BINARY_MASK="$BINARY_MASK" \
-    --build-arg FEATURES="$3" \
-    . && \
-  docker push $USERNAME/$IMAGE:latest
-}
-
-#build_and_push indexer near-framework "near,near-indexer-framework"
-#build_and_push indexer
-build_and_push relayer
+docker build -f ./docker/Dockerfile -t "$LATEST_IMAGE" . && \
+docker tag "$LATEST_IMAGE" "$VERSIONED_IMAGE" && \
+docker push "$LATEST_IMAGE" && \
+docker push "$VERSIONED_IMAGE"

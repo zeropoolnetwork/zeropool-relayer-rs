@@ -17,7 +17,6 @@ pub struct Config {
     pub port: u16,
     pub backend: BackendKind,
     pub redis_url: String,
-    pub indexer_url: String,
     pub fee: u64,
     pub mock_prover: bool,
 }
@@ -40,7 +39,6 @@ impl Config {
         Ok(Config {
             port: std::env::var("PORT")?.parse()?,
             redis_url: std::env::var("REDIS_URL")?,
-            indexer_url: std::env::var("INDEXER_URL")?,
             fee: std::env::var("FEE")?.parse()?,
             mock_prover: std::env::var("MOCK_PROVER")
                 .map(|var| var.parse::<bool>())

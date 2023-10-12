@@ -80,7 +80,8 @@ where
                 )
                 .await?;
 
-                match f(job.clone(), ctx.clone()).await {
+                let j = job.clone();
+                match f(j, ctx.clone()).await {
                     Ok(_) => {
                         con.set_ex(
                             format!("job:{job_id}"),
