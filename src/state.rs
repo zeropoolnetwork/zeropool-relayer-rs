@@ -89,10 +89,10 @@ impl AppState {
         let transfer_vk = std::fs::read_to_string("params/transfer_verification_key.json")?;
         let transfer_vk: VK<_> = serde_json::from_str(&transfer_vk)?;
 
-        let tree_vk = std::fs::read_to_string("params/tree_update_verification_key.json")?;
+        let tree_vk = std::fs::read_to_string("params/tree_verification_key.json")?;
         let tree_vk: VK<_> = serde_json::from_str(&tree_vk)?;
 
-        let tree_params_data = std::fs::read("params/tree_update_params.bin")?;
+        let tree_params_data = std::fs::read("params/tree_params.bin")?;
         let tree_params = Parameters::read(&mut tree_params_data.as_slice(), true, true)?;
 
         Ok(Self {
