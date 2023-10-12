@@ -18,10 +18,13 @@ use crate::{
     Engine,
 };
 
+// TODO: Specify pool address separately from relayer address.
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     seed: String,
     profile: String,
+    pool_address: String,
 }
 
 pub struct WavesBackend {
@@ -45,7 +48,7 @@ impl WavesBackend {
 
         let private_key = PrivateKey::from_seed(&config.seed, 0)?;
         let public_key = private_key.public_key();
-        let address = public_key.address(chain_id)?;
+        let address = Address::from_string(&config.pool_address)?;
         let node = Node::from_profile(profile);
 
         tracing::info!("Current height is {}", node.get_height().await?);
@@ -148,17 +151,18 @@ impl BlockchainBackend for WavesBackend {
     }
 
     async fn get_pool_index(&self) -> Result<u64> {
-        let index = self
-            .node
-            .get_data_by_key(&self.address, "PoolIndex")
-            .await?;
+        let index = self.node.get_data_by_key(&self.address, "PoolIndex").await;
 
-        let index_num = match index {
-            DataEntry::IntegerEntry { value, .. } => value as u64,
-            _ => bail!("PoolIndex is not an integer"),
-        };
-
-        Ok(index_num)
+        match index {
+            Ok(DataEntry::IntegerEntry { value, .. }) => Ok(value as u64),
+            Ok(_) => {
+                bail!("PoolIndex is not an integer");
+            }
+            Err(err) => {
+                tracing::warn!("Failed to get PoolIndex: {}", err);
+                Ok(0)
+            }
+        }
     }
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
