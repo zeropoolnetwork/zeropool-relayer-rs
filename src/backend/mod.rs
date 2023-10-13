@@ -1,5 +1,6 @@
 use anyhow::Result;
 use axum::async_trait;
+use fawkes_crypto::engines::U256;
 use zeropool_tx::TxData;
 
 use crate::{
@@ -29,7 +30,7 @@ pub trait BlockchainBackend: Sync + Send {
     /// Fetch the current pool index from the blockchain.
     async fn get_pool_index(&self) -> Result<u64>;
 
-    // async fn get_merkle_root(&self) -> Result<Vec<u8>>;
+    async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>>;
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>>;
 

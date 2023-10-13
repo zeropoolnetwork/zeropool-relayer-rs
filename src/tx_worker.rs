@@ -8,7 +8,7 @@ use fawkes_crypto::backend::bellman_groth16::{
 use libzeropool_rs::{
     libzeropool::{
         constants,
-        fawkes_crypto::ff_uint::{Num, Uint},
+        fawkes_crypto::ff_uint::Num,
         native::tree::{TreePub, TreeSec},
         POOL_PARAMS,
     },
@@ -24,7 +24,7 @@ use crate::{
     Fr,
 };
 
-const OUTPLUSONE: u64 = constants::OUT as u64 + 1;
+const TX_SIZE: u64 = constants::OUT as u64 + 1;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Payload {
@@ -48,7 +48,7 @@ pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload
     // Modify state, if something goes wrong later, we'll rollback.
     tree.add_leaf(tx.out_commit)?;
     ctx.transactions.set(
-        next_commit_index * OUTPLUSONE,
+        next_commit_index * TX_SIZE,
         tx.out_commit,
         &vec![0; 32],
         &tx.memo,
@@ -154,7 +154,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
 
         // Wait until the preceding transactions are executed.
         let pool_index = *ctx.pool_index.read().await;
-        if pool_index == next_commit_index * OUTPLUSONE {
+        if pool_index == next_commit_index * TX_SIZE {
             break;
         }
     }
@@ -174,13 +174,14 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
 
     // Update transaction with hash
     ctx.transactions.set(
-        next_commit_index * OUTPLUSONE,
+        next_commit_index * TX_SIZE,
         tx.out_commit,
         &tx_hash,
         &tx.memo,
     )?;
 
-    *ctx.pool_index.write().await += OUTPLUSONE;
+    *ctx.pool_index.write().await += TX_SIZE;
+    *ctx.pool_root.write().await = root_after.0.into();
 
     Ok(())
 }

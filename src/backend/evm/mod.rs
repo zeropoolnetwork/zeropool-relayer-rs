@@ -2,11 +2,9 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use axum::async_trait;
-use libzeropool_rs::libzeropool::fawkes_crypto::ff_uint::Uint;
 use secp256k1::SecretKey;
 use serde::Deserialize;
 use web3::{
-    api::Namespace,
     contract::{Contract, Options},
     transports::Http,
     types::{TransactionParameters, U256},
@@ -110,6 +108,10 @@ impl BlockchainBackend for EvmBackend {
             .await?;
 
         Ok(pool_index.as_u64())
+    }
+
+    async fn get_merkle_root(&self, index: u64) -> Result<Option<fawkes_crypto::engines::U256>> {
+        todo!()
     }
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {

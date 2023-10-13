@@ -1,5 +1,6 @@
 use anyhow::Result;
 use axum::async_trait;
+use fawkes_crypto::engines::U256;
 use tokio::sync::Mutex;
 use zeropool_tx::TxData;
 
@@ -40,6 +41,10 @@ impl BlockchainBackend for MockBackend {
 
     async fn get_pool_index(&self) -> Result<u64> {
         Ok(*self.pool_index.lock().await)
+    }
+
+    async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>> {
+        return Ok(Some(U256::from(index)));
     }
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {

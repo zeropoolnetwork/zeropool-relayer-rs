@@ -236,12 +236,16 @@ struct InfoResponse {
 async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse>> {
     let pool_index = *state.pool_index.read().await;
 
+    let root = state.pool_root.read().await.to_string();
+    let optimistic_root = state.tree.lock().await.root()?.to_string();
+    let optimistic_delta_index = state.tree.lock().await.num_leaves() * 128; // FIXME: use the constant
+
     Ok(Json(InfoResponse {
         api_version: "2".to_owned(),
-        root: "1".to_owned(),
-        optimistic_root: "1".to_owned(),
+        root,
+        optimistic_root,
         delta_index: pool_index.to_string(),
-        optimistic_delta_index: "1".to_owned(),
+        optimistic_delta_index: optimistic_delta_index.to_string(),
     }))
 }
 

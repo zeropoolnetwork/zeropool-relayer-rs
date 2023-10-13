@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use axum::async_trait;
+use fawkes_crypto::engines::U256;
 use serde::Deserialize;
 use waves_rust::{
     api::{Node, Profile},
@@ -163,6 +164,10 @@ impl BlockchainBackend for WavesBackend {
                 Ok(0)
             }
         }
+    }
+
+    async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>> {
+        todo!()
     }
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {

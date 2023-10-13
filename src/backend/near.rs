@@ -1,5 +1,7 @@
 use anyhow::Result;
 use axum::async_trait;
+use borsh::BorshDeserialize;
+use fawkes_crypto::engines::U256;
 use near_crypto::InMemorySigner;
 use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
@@ -236,6 +238,27 @@ impl BlockchainBackend for NearBackend {
             Ok(from_slice::<u64>(&result.result)?)
         } else {
             Err(anyhow::anyhow!("get_pool_index: Unexpected response"))
+        }
+    }
+
+    async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>> {
+        let index = U256::from(index);
+        let args = FunctionArgs::from(borsh::to_vec(&index)?);
+        let request = methods::query::RpcQueryRequest {
+            block_reference: BlockReference::Finality(Finality::Final),
+            request: QueryRequest::CallFunction {
+                account_id: self.config.token_id.clone(),
+                method_name: "merkle_root".to_owned(),
+                args,
+            },
+        };
+
+        let response = self.client.call(request).await?;
+
+        if let QueryResponseKind::CallResult(result) = response.kind {
+            Ok(<Option<U256>>::try_from_slice(&result.result)?)
+        } else {
+            Err(anyhow::anyhow!("get_merkle_root: Unexpected response"))
         }
     }
 

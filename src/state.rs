@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use fawkes_crypto::backend::bellman_groth16::verifier::VK;
+use fawkes_crypto::{backend::bellman_groth16::verifier::VK, engines::U256};
 use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
 use tokio::sync::{Mutex, RwLock};
 
@@ -20,9 +20,10 @@ const TX_INDEX_STRIDE: usize = libzeropool_rs::libzeropool::constants::OUT + 1;
 pub struct AppState {
     pub config: Config,
     pub transactions: TxStorage,
-    pub tree: Mutex<MerkleTree>, // TODO: Use mutex?
+    pub tree: Mutex<MerkleTree>,
     pub job_queue: JobQueue<Payload, AppState>,
     pub backend: Arc<dyn BlockchainBackend>,
+    pub pool_root: RwLock<U256>,
     pub pool_index: RwLock<u64>,
     pub fee: u64,
     pub transfer_vk: VK<Engine>,
@@ -42,13 +43,15 @@ impl AppState {
             BackendKind::Waves(config) => {
                 Arc::new(crate::backend::waves::WavesBackend::new(config).await?)
             }
-            _ => todo!("Backend unimplemented"),
         };
 
         let job_queue = WorkerJobQueue::new(&config.redis_url)?;
         let mut transactions = TxStorage::open("transactions.persy")?;
         let mut tree = MerkleTree::open("tree.persy")?;
         let pool_index = backend.get_pool_index().await?;
+        let pool_root = backend.get_merkle_root(pool_index).await?.ok_or_else(|| {
+            anyhow::anyhow!("Pool root is not available for index {}", pool_index)
+        })?;
         let relayer_num_leaves = tree.num_leaves();
         let relayer_index = relayer_num_leaves * TX_INDEX_STRIDE as u64;
         let fee = config.fee;
@@ -102,14 +105,11 @@ impl AppState {
             backend,
             tree: Mutex::new(tree),
             pool_index: RwLock::new(pool_index),
+            pool_root: RwLock::new(pool_root),
             fee,
             transfer_vk,
             tree_vk,
             tree_params,
         })
-    }
-
-    pub async fn get_pool_index(&self) -> u64 {
-        *self.pool_index.read().await
     }
 }
