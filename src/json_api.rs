@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{Method, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -13,7 +13,10 @@ use fawkes_crypto::{backend::bellman_groth16::verifier::verify, engines::U256, f
 use libzeropool_rs::libzeropool::native::tx::parse_delta;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 use zeropool_tx::TxType;
 
 use crate::{
@@ -24,6 +27,10 @@ use crate::{
 };
 
 pub fn routes(ctx: Arc<AppState>) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST]);
+
     Router::new()
         .route(
             "/transactions",
@@ -34,6 +41,7 @@ pub fn routes(ctx: Arc<AppState>) -> Router {
         .route("/job/:id", get(job))
         .route("/info", get(info))
         .layer(TraceLayer::new_for_http())
+        .layer(cors)
         .with_state(ctx)
 }
 
