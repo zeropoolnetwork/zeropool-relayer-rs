@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use axum::async_trait;
-use fawkes_crypto::engines::U256;
+use fawkes_crypto::{engines::U256, ff_uint::Uint};
 use serde::Deserialize;
 use waves_rust::{
     api::{Node, Profile},
@@ -167,7 +167,25 @@ impl BlockchainBackend for WavesBackend {
     }
 
     async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>> {
-        todo!()
+        let index = self
+            .node
+            .get_data_by_key(&self.address, &format!("R:{index}"))
+            .await;
+
+        match index {
+            Ok(DataEntry::BinaryEntry { value, .. }) => {
+                if value.len() != std::mem::size_of::<U256>() {
+                    bail!("Invalid merkle root length");
+                }
+
+                let root = U256::from_big_endian(&value);
+
+                Ok(Some(root))
+            }
+            _ => {
+                bail!("PoolIndex is not an integer");
+            }
+        }
     }
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
