@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{bail, Result};
 use axum::async_trait;
 use fawkes_crypto::{engines::U256, ff_uint::Uint};
@@ -167,12 +169,20 @@ impl BlockchainBackend for WavesBackend {
     }
 
     async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>> {
-        let index = self
+        if index == 0 {
+            let first_root = U256::from_str(
+                "11469701942666298368112882412133877458305516134926649826543144744382391691533",
+            )
+            .unwrap();
+            return Ok(Some(first_root));
+        }
+
+        let result = self
             .node
             .get_data_by_key(&self.address, &format!("R:{index}"))
             .await;
 
-        match index {
+        match result {
             Ok(DataEntry::BinaryEntry { value, .. }) => {
                 if value.len() != std::mem::size_of::<U256>() {
                     bail!("Invalid merkle root length");
@@ -183,7 +193,7 @@ impl BlockchainBackend for WavesBackend {
                 Ok(Some(root))
             }
             _ => {
-                bail!("PoolIndex is not an integer");
+                bail!("R:{index} is not a binary entry");
             }
         }
     }

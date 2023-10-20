@@ -93,9 +93,6 @@ pub async fn process_failure(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()
     Ok(())
 }
 
-// TODO: Thoroughly check for race conditions. This might be a mine field, considering that
-//       process_job runs in parallel.
-
 #[tracing::instrument(skip_all, fields(job_id = %job.id))]
 pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     let Payload {

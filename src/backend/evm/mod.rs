@@ -111,7 +111,14 @@ impl BlockchainBackend for EvmBackend {
     }
 
     async fn get_merkle_root(&self, index: u64) -> Result<Option<fawkes_crypto::engines::U256>> {
-        todo!()
+        let root: U256 = self
+            .contract
+            .query("roots", index, None, Options::default(), None)
+            .await?;
+
+        let root = fawkes_crypto::engines::U256::new(root.0);
+
+        Ok(Some(root))
     }
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
