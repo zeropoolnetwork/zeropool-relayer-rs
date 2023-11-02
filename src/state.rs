@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use fawkes_crypto::{backend::bellman_groth16::verifier::VK, engines::U256};
+use fawkes_crypto::{backend::bellman_groth16::verifier::VK, engines::U256, ff_uint::PrimeField};
 use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
 use tokio::sync::{Mutex, RwLock};
 
@@ -52,11 +52,14 @@ impl AppState {
         let pool_root = backend.get_merkle_root(pool_index).await?.ok_or_else(|| {
             anyhow::anyhow!("Pool root is not available for index {}", pool_index)
         })?;
-        let relayer_num_leaves = tree.num_leaves();
-        let relayer_index = relayer_num_leaves * TX_INDEX_STRIDE as u64;
+        let mut relayer_index = tree.num_leaves() * TX_INDEX_STRIDE as u64;
         let fee = config.fee;
 
-        // TODO: More criteria for state corruption.
+        tracing::info!("Pool index: {}", pool_index);
+        tracing::info!("Relayer index: {}", relayer_index);
+        tracing::info!("Pool root: {}", pool_root);
+        tracing::info!("Relayer root: {}", tree.root()?);
+
         let is_state_corrupted = relayer_index > pool_index;
 
         if is_state_corrupted {
@@ -64,6 +67,7 @@ impl AppState {
 
             transactions = TxStorage::clear_and_open("transactions.persy")?;
             tree = MerkleTree::clear_and_open("tree.persy")?;
+            relayer_index = 0;
         }
 
         if relayer_index < pool_index {
@@ -87,6 +91,14 @@ impl AppState {
                 tree.add_leaf(tx_data.out_commit)?;
                 transactions.set(tx_index as u64, tx_data.out_commit, &tx_hash, &tx_data.memo)?;
             }
+
+            relayer_index = tree.num_leaves() * TX_INDEX_STRIDE as u64;
+
+            tracing::info!(
+                "New relayer index: {}",
+                tree.num_leaves() * TX_INDEX_STRIDE as u64
+            );
+            tracing::info!("New relayer root: {}", tree.root()?);
         }
 
         let transfer_vk = std::fs::read_to_string("params/transfer_verification_key.json")?;

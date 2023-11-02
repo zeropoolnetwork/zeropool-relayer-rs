@@ -24,8 +24,8 @@ mod tx_worker;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
+    tracing_subscriber::fmt::init();
 
     let config = Config::init().unwrap();
     tracing::info!("{config:#?}");

@@ -21,6 +21,10 @@ use crate::{
     Engine,
 };
 
+// TODO: Calculate tx fee properly.
+// 0.01 WAVES
+const TX_FEE: u64 = 10_000_000;
+
 // TODO: Specify pool address separately from relayer address.
 
 #[derive(Debug, Clone, Deserialize)]
@@ -140,7 +144,7 @@ impl BlockchainBackend for WavesBackend {
         let timestamp = get_current_epoch_millis();
         let signed_tx = Transaction::new(
             transaction_data,
-            Amount::new(0, None),
+            Amount::new(TX_FEE, None),
             timestamp,
             self.public_key.clone(),
             3,

@@ -290,10 +290,6 @@ impl MerkleTree {
             let parent_index = cur_index / 2;
 
             if cur_hash != self.default_nodes[parent_depth as usize] {
-                if parent_depth == 0 {
-                    println!("Root: {}", cur_hash);
-                }
-
                 self.nodes
                     .set_tx(&mut tx, parent_depth, parent_index, cur_hash)?;
             } else {

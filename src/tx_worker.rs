@@ -84,11 +84,11 @@ pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload
 pub async fn process_failure(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     let prev_commit_index = job.data.prev_commit_index;
 
-    tracing::debug!("Rolling back tx storage to {prev_commit_index}");
+    tracing::info!("Rolling back tx storage to {prev_commit_index}");
     ctx.transactions.rollback(prev_commit_index)?;
     ctx.tree.lock().await.rollback(prev_commit_index)?;
     ctx.job_queue.cancel_jobs_after(job.id).await?;
-    tracing::debug!("Rollback complete");
+    tracing::info!("Rollback complete");
 
     Ok(())
 }

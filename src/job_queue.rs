@@ -92,7 +92,10 @@ where
                         tracing::info!("Job {} done", job_id);
                     }
                     Err(e) => {
-                        err_f(job, ctx.clone()).await?;
+                        let res = err_f(job, ctx.clone()).await;
+                        if let Err(err) = res {
+                            tracing::error!("Error handling failed for job {job_id}: {err}");
+                        }
 
                         con.set_ex(
                             format!("job:{job_id}"),
