@@ -37,6 +37,7 @@ pub fn routes(ctx: Arc<AppState>) -> Router {
             "/transactions",
             get(get_transactions).post(create_transaction),
         )
+        .route("/transactions/v2", get(get_transactions_legacy))
         // For compatibility with old API
         .route("/sendTransactions", post(create_transaction_legacy))
         .route("/job/:id", get(job))
@@ -189,7 +190,7 @@ async fn validate_tx(tx: &TxDataRequest, state: &AppState) -> Vec<TxValidationEr
 #[derive(Serialize)]
 struct Hex(#[serde(with = "hex")] Vec<u8>);
 
-async fn get_transactions(
+async fn get_transactions_legacy(
     State(state): State<Arc<AppState>>,
     Query(pagination): Query<TxPaginationQuery>,
 ) -> AppResult<Json<Vec<Hex>>> {
@@ -208,6 +209,23 @@ async fn get_transactions(
                 Hex(data)
             })
         })
+        .collect::<Result<_, _>>()?;
+
+    Ok(Json(txs))
+}
+
+async fn get_transactions(
+    State(state): State<Arc<AppState>>,
+    Query(pagination): Query<TxPaginationQuery>,
+) -> AppResult<Json<Vec<Hex>>> {
+    let limit = pagination.limit.unwrap_or(100);
+    let offset = pagination.offset.unwrap_or(0);
+    // let pool_index = *state.pool_index.read().await;
+
+    let txs = state
+        .transactions
+        .iter_range(offset..(offset + limit * 128))?
+        .map(|res| res.map(|(index, data)| Hex(data)))
         .collect::<Result<_, _>>()?;
 
     Ok(Json(txs))
@@ -238,8 +256,8 @@ struct InfoResponse {
     api_version: String,
     root: String,
     optimistic_root: String,
-    delta_index: String,
-    optimistic_delta_index: String,
+    pool_index: String,
+    optimistic_pool_index: String,
 }
 
 async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse>> {
@@ -253,8 +271,8 @@ async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse
         api_version: "2".to_owned(),
         root,
         optimistic_root,
-        delta_index: pool_index.to_string(),
-        optimistic_delta_index: optimistic_delta_index.to_string(),
+        pool_index: pool_index.to_string(),
+        optimistic_pool_index: optimistic_delta_index.to_string(),
     }))
 }
 
