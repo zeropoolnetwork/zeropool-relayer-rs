@@ -129,15 +129,16 @@ impl BlockchainBackend for WavesBackend {
 
     /// Sign and send a transaction to the blockchain.
     async fn send_tx(&self, tx: TxData<Engine>) -> Result<TxHash> {
-        let mut tx_data = Vec::new();
-        zeropool_tx::waves::write(&tx, &mut tx_data)?;
+        let mut tx_bytes = Vec::new();
+        zeropool_tx::waves::write(&tx, &mut tx_bytes)?;
+
+        let base64_tx = Base64String::from_bytes(tx_bytes);
+
+        tracing::debug!("Transaction {:?}", base64_tx);
 
         let transaction_data = TransactionData::InvokeScript(InvokeScriptTransaction::new(
             self.address.clone(),
-            Function::new(
-                "transact".to_owned(),
-                vec![Arg::Binary(Base64String::from_bytes(tx_data))],
-            ),
+            Function::new("transact".to_owned(), vec![Arg::Binary(base64_tx)]),
             vec![],
         ));
 

@@ -5253,8 +5253,9 @@ dependencies = [
 
 [[package]]
 name = "zeropool-tx"
-version = "0.1.0"
-source = "git+https://github.com/zeropoolnetwork/zeropool-tx#347823f56547379ae1f9dc6e77713aadc1e8d0db"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef1489cb100d4394220749672d8247a92f6680e28602655dbae327512f961d61"
 dependencies = [
  "byteorder",
  "fawkes-crypto",

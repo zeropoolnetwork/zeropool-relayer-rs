@@ -33,7 +33,7 @@ thiserror = "1.0.39"
 reqwest = "0.11.14"
 tower-http = { version = "0.3.5", features = ["trace", "cors"] }
 bs58 = "0.4.0"
-zeropool-tx = { git = "https://github.com/zeropoolnetwork/zeropool-tx" }
+zeropool-tx = { version = "0.1.1" }
 
 web3 = { version = "0.18.0", optional = true }
 waves-rust = { version = "0.2.4", optional = true }
