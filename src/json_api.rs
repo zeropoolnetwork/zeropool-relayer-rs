@@ -257,7 +257,7 @@ struct InfoResponse {
     root: String,
     optimistic_root: String,
     pool_index: String,
-    optimistic_pool_index: String,
+    optimistic_index: String,
 }
 
 async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse>> {
@@ -268,11 +268,11 @@ async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse
     let optimistic_delta_index = state.tree.lock().await.num_leaves() * 128; // FIXME: use the constant
 
     Ok(Json(InfoResponse {
-        api_version: "2".to_owned(),
+        api_version: "3".to_owned(),
         root,
         optimistic_root,
         pool_index: pool_index.to_string(),
-        optimistic_pool_index: optimistic_delta_index.to_string(),
+        optimistic_index: optimistic_delta_index.to_string(),
     }))
 }
 
