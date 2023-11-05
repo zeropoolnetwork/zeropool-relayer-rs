@@ -140,7 +140,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         token_id: String::new(),
     };
 
-    tracing::info!("Sending tx");
+    tracing::debug!("Transaction prepared");
 
     // TODO: Use a separate ordered queue for sending transactions?
     loop {
@@ -153,8 +153,17 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         let pool_index = *ctx.pool_index.read().await;
         if pool_index == next_commit_index * TX_SIZE {
             break;
+        } else {
+            tracing::debug!(
+                "Waiting for tx {} to be executed, current pool index is {}",
+                next_commit_index * TX_SIZE,
+                pool_index
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
+
+    tracing::info!("Sending tx: {full_tx:#?}");
 
     let tx_hash = match ctx.backend.send_tx(full_tx).await {
         Ok(tx_hash) => tx_hash,
