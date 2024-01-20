@@ -668,7 +668,7 @@ mod tests {
 
     // TODO: Generate test cases on the fly
     #[test]
-    // #[ignore]
+    #[ignore]
     fn generate_test_cases() {
         let mut tree = libzeropool_rs::merkle::MerkleTree::new_test(POOL_PARAMS.clone());
 

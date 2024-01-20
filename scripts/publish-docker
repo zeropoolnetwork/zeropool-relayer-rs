@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 
-
 USERNAME=voidxnull
 IMAGE=zeropool-relayer
 
+# Extract the version from the Cargo metadata
 VERSION=$(cargo metadata --format-version 1 | jq -r ".packages[] | select(.name==\"zeropool-relayer\") | .version")
-LATEST_IMAGE=$USERNAME/$IMAGE:latest
-VERSIONED_IMAGE=$USERNAME/$IMAGE:$VERSION
 
-echo "Publishing $LATEST_IMAGE and $VERSIONED_IMAGE"
+# Function to build and push image with a specific feature
+build_and_push() {
+    FEATURE=$1
+    LATEST_IMAGE=$USERNAME/$IMAGE-$FEATURE:latest
+    VERSIONED_IMAGE=$USERNAME/$IMAGE-$FEATURE:$VERSION
 
-docker build -f ./docker/Dockerfile -t "$LATEST_IMAGE" . && \
-docker tag "$LATEST_IMAGE" "$VERSIONED_IMAGE" && \
-docker push "$LATEST_IMAGE" && \
-docker push "$VERSIONED_IMAGE"
+    echo "Building and publishing $LATEST_IMAGE and $VERSIONED_IMAGE with FEATURES=$FEATURE"
+
+    docker build -f ./docker/Dockerfile --build-arg FEATURES="$FEATURE" -t "$LATEST_IMAGE" . && \
+    docker tag "$LATEST_IMAGE" "$VERSIONED_IMAGE" && \
+    docker push "$LATEST_IMAGE" && \
+    docker push "$VERSIONED_IMAGE"
+}
+
+# Build and push for each feature
+build_and_push plonk
+#build_and_push groth16

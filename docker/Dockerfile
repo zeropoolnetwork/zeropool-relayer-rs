@@ -1,4 +1,4 @@
-FROM rust:1.73 as build
+FROM rustlang/rust:nightly as build
 
 ARG FEATURES=""
 ENV FEATURES=$FEATURES
@@ -19,7 +19,7 @@ COPY ./src ./src
 RUN cargo build --release --features "$FEATURES"
 
 # Final image
-FROM rust:1.73
+FROM rustlang/rust:nightly
 
 WORKDIR /app
 COPY --from=build /zeropool-relayer/target/release/zeropool-relayer /app/zeropool-relayer

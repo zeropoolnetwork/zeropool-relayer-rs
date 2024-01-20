@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use axum::async_trait;
-use fawkes_crypto::{engines::U256, ff_uint::Uint};
+use libzeropool_rs::libzeropool::fawkes_crypto::{engines::U256, ff_uint::Uint};
 use serde::Deserialize;
 use waves_rust::{
     api::{Node, Profile},
@@ -18,7 +18,7 @@ use zeropool_tx::TxData;
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
-    Engine,
+    Engine, Fr, Proof,
 };
 
 // TODO: Calculate tx fee properly.
@@ -73,6 +73,10 @@ impl WavesBackend {
 
 #[async_trait]
 impl BlockchainBackend for WavesBackend {
+    fn name(&self) -> &'static str {
+        "waves"
+    }
+
     async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>> {
         let mut txs = Vec::new();
 
@@ -123,12 +127,12 @@ impl BlockchainBackend for WavesBackend {
         Ok(txs)
     }
 
-    fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
+    async fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }
 
     /// Sign and send a transaction to the blockchain.
-    async fn send_tx(&self, tx: TxData<Engine>) -> Result<TxHash> {
+    async fn send_tx(&self, tx: TxData<Fr, Proof>) -> Result<TxHash> {
         let mut tx_bytes = Vec::new();
         zeropool_tx::waves::write(&tx, &mut tx_bytes)?;
 
@@ -203,7 +207,7 @@ impl BlockchainBackend for WavesBackend {
         }
     }
 
-    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
+    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Fr, Proof>> {
         let r = &mut calldata.as_slice();
         let tx = zeropool_tx::waves::read(r)?;
         Ok(tx)

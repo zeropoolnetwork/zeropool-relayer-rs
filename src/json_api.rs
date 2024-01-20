@@ -9,8 +9,14 @@ use axum::{
     Json, Router,
 };
 use byteorder::{BigEndian, ReadBytesExt};
-use fawkes_crypto::{backend::bellman_groth16::verifier::verify, engines::U256, ff_uint::Uint};
-use libzeropool_rs::libzeropool::native::tx::parse_delta;
+#[cfg(feature = "groth16")]
+use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::verifier::verify;
+#[cfg(feature = "plonk")]
+use libzeropool_rs::libzeropool::fawkes_crypto::backend::plonk::verifier::verify;
+use libzeropool_rs::libzeropool::{
+    fawkes_crypto::{engines::U256, ff_uint::Uint},
+    native::tx::parse_delta,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::{
@@ -66,10 +72,8 @@ pub struct TxDataRequest {
     pub proof: ProofWithInputs,
     #[serde(with = "hex")]
     pub memo: Vec<u8>,
-    #[serde(with = "hex")]
+    #[serde(with = "hex", default)]
     pub extra_data: Vec<u8>,
-    // #[serde(default)]
-    // pub sync: bool,
 }
 
 async fn create_transaction(
@@ -90,7 +94,7 @@ async fn create_transaction(
         extra_data: tx_data.extra_data,
     };
 
-    validation_errors.extend(state.backend.validate_tx(&tx));
+    validation_errors.extend(state.backend.validate_tx(&tx).await);
 
     if !validation_errors.is_empty() {
         return Err(AppError::TxValidationErrors(validation_errors));
@@ -135,7 +139,22 @@ async fn validate_tx(tx: &TxDataRequest, state: &AppState) -> Vec<TxValidationEr
 
     // TODO: Cache nullifiers
 
-    if !verify(&state.transfer_vk, &tx.proof.proof, &tx.proof.inputs) {
+    #[cfg(feature = "groth16")]
+    if !verify(
+        &state.groth16_params.transfer_vk,
+        &tx.proof.proof,
+        &tx.proof.inputs,
+    ) {
+        errors.push(TxValidationError::InvalidTransferProof);
+    }
+
+    #[cfg(feature = "plonk")]
+    if !verify(
+        &state.plonk_params.params,
+        &state.plonk_params.transfer_vk,
+        &tx.proof.proof,
+        &tx.proof.inputs,
+    ) {
         errors.push(TxValidationError::InvalidTransferProof);
     }
 
@@ -253,7 +272,8 @@ async fn job(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InfoResponse {
-    api_version: String,
+    backend: &'static str,
+    api_version: &'static str,
     root: String,
     optimistic_root: String,
     pool_index: String,
@@ -268,7 +288,8 @@ async fn info(State(state): State<Arc<AppState>>) -> AppResult<Json<InfoResponse
     let optimistic_delta_index = state.tree.lock().await.num_leaves() * 128; // FIXME: use the constant
 
     Ok(Json(InfoResponse {
-        api_version: "3".to_owned(),
+        backend: state.backend.name(),
+        api_version: "3",
         root,
         optimistic_root,
         pool_index: pool_index.to_string(),

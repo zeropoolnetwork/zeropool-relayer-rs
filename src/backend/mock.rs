@@ -1,13 +1,13 @@
 use anyhow::Result;
 use axum::async_trait;
-use fawkes_crypto::engines::U256;
+use libzeropool_rs::libzeropool::fawkes_crypto::engines::U256;
 use tokio::sync::Mutex;
 use zeropool_tx::TxData;
 
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
-    Engine,
+    Engine, Fr, Proof,
 };
 
 pub struct MockBackend {
@@ -24,16 +24,20 @@ impl MockBackend {
 
 #[async_trait]
 impl BlockchainBackend for MockBackend {
+    fn name(&self) -> &'static str {
+        "mock"
+    }
+
     async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>> {
         Ok(vec![])
     }
 
-    fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
+    async fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }
 
     /// Sign and send a transaction to the blockchain.
-    async fn send_tx(&self, _tx: TxData<Engine>) -> Result<TxHash> {
+    async fn send_tx(&self, _tx: TxData<Fr, Proof>) -> Result<TxHash> {
         let mut pool_index = self.pool_index.lock().await;
         *pool_index += 128;
         Ok(pool_index.to_be_bytes().to_vec())
@@ -47,7 +51,7 @@ impl BlockchainBackend for MockBackend {
         return Ok(Some(U256::from(index)));
     }
 
-    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
+    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Fr, Proof>> {
         Ok(bincode::deserialize(&calldata)?)
     }
 

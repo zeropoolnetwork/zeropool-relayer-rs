@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use axum::async_trait;
+use libzeropool_rs::libzeropool::fawkes_crypto;
 use secp256k1::SecretKey;
 use serde::Deserialize;
 use web3::{
@@ -15,7 +16,7 @@ use zeropool_tx::TxData;
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
-    Engine,
+    Engine, Fr, Proof,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,11 +62,15 @@ impl EvmBackend {
 
 #[async_trait]
 impl BlockchainBackend for EvmBackend {
+    fn name(&self) -> &'static str {
+        "evm"
+    }
+
     async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>> {
         Ok(vec![])
     }
 
-    fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
+    async fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         // let address = recover(&tx.signature, &tx.hash).unwrap();
         // let balance = self
         //     .token
@@ -75,7 +80,7 @@ impl BlockchainBackend for EvmBackend {
     }
 
     /// Sign and send a transaction to the blockchain.
-    async fn send_tx(&self, tx: TxData<Engine>) -> Result<TxHash> {
+    async fn send_tx(&self, tx: TxData<Fr, Proof>) -> Result<TxHash> {
         let mut calldata = Vec::new();
         zeropool_tx::evm::write(&tx, &mut calldata)?;
 
@@ -121,7 +126,7 @@ impl BlockchainBackend for EvmBackend {
         Ok(Some(root))
     }
 
-    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Engine>> {
+    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Fr, Proof>> {
         let r = &mut calldata.as_slice();
         let tx = zeropool_tx::evm::read(r)?;
         Ok(tx)

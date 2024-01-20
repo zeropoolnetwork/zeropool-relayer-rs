@@ -1,8 +1,24 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use fawkes_crypto::{backend::bellman_groth16::verifier::VK, engines::U256, ff_uint::PrimeField};
-use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::Parameters;
+#[cfg(feature = "plonk")]
+use libzeropool_rs::libzeropool::fawkes_crypto::backend::plonk::{
+    setup::{setup, ProvingKey},
+    Parameters as PlonkParameters,
+};
+use libzeropool_rs::libzeropool::fawkes_crypto::{circuit::cs::CS, engines::U256};
+#[cfg(feature = "plonk")]
+use libzeropool_rs::{
+    libzeropool::{
+        circuit::{
+            tree::{tree_update, CTreePub, CTreeSec},
+            tx::{c_transfer, CTransferPub, CTransferSec},
+        },
+        fawkes_crypto::{circuit::cs::BuildCS, core::signal::Signal},
+        POOL_PARAMS,
+    },
+    proof_plonk::prove_tx,
+};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{
@@ -12,10 +28,24 @@ use crate::{
     merkle_tree::MerkleTree,
     tx_storage::TxStorage,
     tx_worker::{Payload, WorkerJobQueue},
-    Engine,
+    Engine, Fr, Parameters, VK,
 };
 
 const TX_INDEX_STRIDE: usize = libzeropool_rs::libzeropool::constants::OUT + 1;
+
+#[cfg(feature = "groth16")]
+pub struct Groth16Params {
+    pub tree_params: Parameters,
+    pub tree_vk: VK,
+    pub transfer_vk: VK,
+}
+
+#[cfg(feature = "plonk")]
+pub struct PlonkParams {
+    pub params: PlonkParameters<Engine>,
+    pub tree_pk: ProvingKey<Engine>,
+    pub transfer_vk: VK,
+}
 
 pub struct AppState {
     pub config: Config,
@@ -26,9 +56,10 @@ pub struct AppState {
     pub pool_root: RwLock<U256>,
     pub pool_index: RwLock<u64>,
     pub fee: u64,
-    pub transfer_vk: VK<Engine>,
-    pub tree_vk: VK<Engine>,
-    pub tree_params: Parameters<Engine>,
+    #[cfg(feature = "groth16")]
+    pub groth16_params: Groth16Params,
+    #[cfg(feature = "plonk")]
+    pub plonk_params: PlonkParams,
 }
 
 impl AppState {
@@ -60,17 +91,14 @@ impl AppState {
         tracing::info!("Pool root: {}", pool_root);
         tracing::info!("Relayer root: {}", tree.root()?);
 
-        let is_state_corrupted = relayer_index > pool_index;
-
-        if is_state_corrupted {
+        // TODO: Attempt rollback first and check the roots. Only reinitialize if the roots don't match.
+        if relayer_index > pool_index {
             tracing::error!("Relayer state is corrupted. Reinitializing...");
 
             transactions = TxStorage::clear_and_open("transactions.persy")?;
             tree = MerkleTree::clear_and_open("tree.persy")?;
             relayer_index = 0;
-        }
-
-        if relayer_index < pool_index {
+        } else if relayer_index < pool_index {
             tracing::info!("Fetching transactions...");
             let all_txs = backend.fetch_latest_transactions().await?;
             tracing::info!(
@@ -94,21 +122,48 @@ impl AppState {
 
             relayer_index = tree.num_leaves() * TX_INDEX_STRIDE as u64;
 
-            tracing::info!(
-                "New relayer index: {}",
-                tree.num_leaves() * TX_INDEX_STRIDE as u64
-            );
+            tracing::info!("New relayer index: {}", relayer_index);
             tracing::info!("New relayer root: {}", tree.root()?);
         }
 
-        let transfer_vk = std::fs::read_to_string("params/transfer_verification_key.json")?;
-        let transfer_vk: VK<_> = serde_json::from_str(&transfer_vk)?;
+        #[cfg(feature = "groth16")]
+        let groth16_params = {
+            let transfer_vk = std::fs::read_to_string("params/transfer_verification_key.json")?;
+            let transfer_vk: VK = serde_json::from_str(&transfer_vk)?;
+            let tree_vk = std::fs::read_to_string("params/tree_verification_key.json")?;
+            let tree_vk: VK = serde_json::from_str(&tree_vk)?;
+            let tree_params_data = std::fs::read("params/tree_params.bin")?;
+            let tree_params = Parameters::read(&mut tree_params_data.as_slice(), true, true)?;
 
-        let tree_vk = std::fs::read_to_string("params/tree_verification_key.json")?;
-        let tree_vk: VK<_> = serde_json::from_str(&tree_vk)?;
+            Groth16Params {
+                tree_params,
+                tree_vk,
+                transfer_vk,
+            }
+        };
 
-        let tree_params_data = std::fs::read("params/tree_params.bin")?;
-        let tree_params = Parameters::read(&mut tree_params_data.as_slice(), true, true)?;
+        #[cfg(feature = "plonk")]
+        let plonk_params = {
+            let plonk_params_data = std::fs::read("params/plonk_params.bin")?;
+            let params = PlonkParameters::read(&mut plonk_params_data.as_slice())?;
+
+            fn tree_circuit<C: CS<Fr = Fr>>(public: CTreePub<C>, secret: CTreeSec<C>) {
+                tree_update(&public, &secret, &*POOL_PARAMS);
+            }
+
+            fn tx_circuit<C: CS<Fr = Fr>>(public: CTransferPub<C>, secret: CTransferSec<C>) {
+                c_transfer(&public, &secret, &*POOL_PARAMS);
+            }
+
+            let (_, tree_pk) = setup(&params, tree_circuit);
+            let (transfer_vk, _) = setup(&params, tx_circuit);
+
+            PlonkParams {
+                tree_pk,
+                params,
+                transfer_vk,
+            }
+        };
 
         Ok(Self {
             config,
@@ -119,9 +174,10 @@ impl AppState {
             pool_index: RwLock::new(pool_index),
             pool_root: RwLock::new(pool_root),
             fee,
-            transfer_vk,
-            tree_vk,
-            tree_params,
+            #[cfg(feature = "groth16")]
+            groth16_params,
+            #[cfg(feature = "plonk")]
+            plonk_params,
         })
     }
 }

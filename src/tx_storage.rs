@@ -1,8 +1,10 @@
 use std::ops::RangeBounds;
 
 use anyhow::Result;
-use fawkes_crypto::ff_uint::{PrimeField, Uint};
-use libzeropool_rs::libzeropool::{constants, fawkes_crypto::ff_uint::Num};
+use libzeropool_rs::libzeropool::{
+    constants,
+    fawkes_crypto::ff_uint::{Num, PrimeField, Uint},
+};
 use persy::{Persy, PersyId, ValueMode};
 
 use crate::Fr;

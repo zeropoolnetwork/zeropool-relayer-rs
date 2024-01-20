@@ -1,19 +1,23 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use fawkes_crypto::backend::bellman_groth16::{
+#[cfg(feature = "groth16")]
+use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::{
     group::{G1Point, G2Point},
     prover::Proof,
 };
-use libzeropool_rs::{
-    libzeropool::{
-        constants,
-        fawkes_crypto::ff_uint::Num,
-        native::tree::{TreePub, TreeSec},
-        POOL_PARAMS,
-    },
-    proof::prove_tree,
+#[cfg(feature = "plonk")]
+use libzeropool_rs::libzeropool::fawkes_crypto::backend::plonk::prover::Proof;
+use libzeropool_rs::libzeropool::{
+    constants,
+    fawkes_crypto::ff_uint::Num,
+    native::tree::{TreePub, TreeSec},
+    POOL_PARAMS,
 };
+#[cfg(feature = "groth16")]
+use libzeropool_rs::proof_groth16::prove_tree;
+#[cfg(feature = "plonk")]
+use libzeropool_rs::proof_plonk::prove_tree;
 use serde::{Deserialize, Serialize};
 use zeropool_tx::TxData;
 
@@ -111,20 +115,57 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
 
     let tree_proof = if ctx.config.mock_prover {
         tracing::debug!("Mocking tree proof");
-        Proof {
-            a: G1Point(Num::ZERO, Num::ZERO),
-            b: G2Point((Num::ZERO, Num::ZERO), (Num::ZERO, Num::ZERO)),
-            c: G1Point(Num::ZERO, Num::ZERO),
+
+        #[cfg(feature = "groth16")]
+        {
+            Proof {
+                a: G1Point(Num::ZERO, Num::ZERO),
+                b: G2Point((Num::ZERO, Num::ZERO), (Num::ZERO, Num::ZERO)),
+                c: G1Point(Num::ZERO, Num::ZERO),
+            }
+        }
+
+        #[cfg(feature = "plonk")]
+        {
+            Proof(vec![])
         }
     } else {
         tracing::debug!("Proving tree");
-        let ctx = ctx.clone();
-        let proof = tokio::task::spawn_blocking(move || {
-            prove_tree(&ctx.tree_params, &*POOL_PARAMS, tree_pub, tree_sec).1
-        })
-        .await?;
-        tracing::info!("Tree proof complete");
-        proof
+
+        #[cfg(feature = "groth16")]
+        {
+            let ctx = ctx.clone();
+            let proof = tokio::task::spawn_blocking(move || {
+                prove_tree(
+                    &ctx.groth16_params.tree_params,
+                    &*POOL_PARAMS,
+                    tree_pub,
+                    tree_sec,
+                )
+                .1
+            })
+            .await?;
+            tracing::info!("Tree proof complete");
+            proof
+        }
+
+        #[cfg(feature = "plonk")]
+        {
+            let ctx = ctx.clone();
+            let proof = tokio::task::spawn_blocking(move || {
+                prove_tree(
+                    &ctx.plonk_params.params,
+                    &ctx.plonk_params.tree_pk,
+                    &*POOL_PARAMS,
+                    tree_pub,
+                    tree_sec,
+                )
+                .1
+            })
+            .await?;
+            tracing::info!("Tree proof complete");
+            proof
+        }
     };
 
     let full_tx = TxData {
@@ -163,7 +204,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         }
     }
 
-    tracing::info!("Sending tx: {full_tx:#?}");
+    tracing::debug!("Sending tx: {full_tx:#?}");
 
     let tx_hash = match ctx.backend.send_tx(full_tx).await {
         Ok(tx_hash) => tx_hash,
