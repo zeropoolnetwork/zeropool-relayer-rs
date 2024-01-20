@@ -56,14 +56,14 @@ where
     where
         Fut: Future<Output = Result<()>> + Send + 'static,
         ErrFut: Future<Output = Result<()>> + Send + 'static,
-        F: Fn(Job<D>, Arc<C>) -> Fut + Send + Sync + 'static,
-        ErrF: Fn(Job<D>, Arc<C>) -> ErrFut + Send + Sync + 'static,
+        F: Fn(Job<D>, Arc<C>) -> Fut + Clone + Send + Sync + 'static,
+        ErrF: Fn(Job<D>, Arc<C>) -> ErrFut + Clone + Send + Sync + 'static,
     {
         let client = self.client.clone();
         let handle = tokio::spawn(async move {
-            let mut con = client.get_async_connection().await?;
-
             loop {
+                let mut con = client.get_async_connection().await?;
+
                 let Ok(Some((_, data))) =
                     con.blpop::<_, Option<(String, Vec<u8>)>>("jobs", 0).await
                 else {
@@ -81,31 +81,46 @@ where
                 .await?;
 
                 let j = job.clone();
-                match f(j, ctx.clone()).await {
-                    Ok(_) => {
-                        con.set_ex(
-                            format!("job:{job_id}"),
-                            bincode::serialize(&JobStatus::Completed)?,
-                            STATUS_EXPIRE_SECONDS,
-                        )
-                        .await?;
-                        tracing::info!("Job {} done", job_id);
-                    }
-                    Err(e) => {
-                        let res = err_f(job, ctx.clone()).await;
-                        if let Err(err) = res {
-                            tracing::error!("Error handling failed for job {job_id}: {err}");
-                        }
+                let f = f.clone();
+                let ctx = ctx.clone();
+                let err_f = err_f.clone();
+                tokio::spawn(async move {
+                    match f(j, ctx.clone()).await {
+                        Ok(_) => {
+                            if let Err(err) = con
+                                .set_ex::<_, _, ()>(
+                                    format!("job:{job_id}"),
+                                    bincode::serialize(&JobStatus::Completed).unwrap(),
+                                    STATUS_EXPIRE_SECONDS,
+                                )
+                                .await
+                            {
+                                tracing::error!("Failed to set job status: {err}");
+                            }
 
-                        con.set_ex(
-                            format!("job:{job_id}"),
-                            bincode::serialize(&JobStatus::Failed)?,
-                            STATUS_EXPIRE_SECONDS,
-                        )
-                        .await?;
-                        tracing::error!("Job {job_id} failed: {e}");
+                            tracing::info!("Job {} done", job_id);
+                        }
+                        Err(e) => {
+                            let res = err_f(job, ctx.clone()).await;
+                            if let Err(err) = res {
+                                tracing::error!("Error handling failed for job {job_id}: {err}");
+                            }
+
+                            if let Err(err) = con
+                                .set_ex::<_, _, ()>(
+                                    format!("job:{job_id}"),
+                                    bincode::serialize(&JobStatus::Failed).unwrap(),
+                                    STATUS_EXPIRE_SECONDS,
+                                )
+                                .await
+                            {
+                                tracing::error!("Failed to set job status: {err}");
+                            }
+
+                            tracing::error!("Job {job_id} failed: {e}");
+                        }
                     }
-                }
+                });
             }
         });
 

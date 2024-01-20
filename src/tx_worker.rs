@@ -51,7 +51,7 @@ pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload
 
     // Modify state, if something goes wrong later, we'll rollback.
     tree.add_leaf(tx.out_commit)?;
-    ctx.transactions.set(
+    ctx.transactions.push(
         next_commit_index * TX_SIZE,
         tx.out_commit,
         &vec![0; 32],

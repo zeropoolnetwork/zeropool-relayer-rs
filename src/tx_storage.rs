@@ -45,6 +45,31 @@ impl TxStorage {
         tx_hash: &[u8],
         memo: &[u8],
     ) -> Result<()> {
+        let mut tx = self.db.begin()?;
+
+        let mut buf =
+            Vec::with_capacity(std::mem::size_of_val(&out_commit) + tx_hash.len() + memo.len());
+        buf.extend_from_slice(&out_commit.0.to_uint().to_big_endian());
+        buf.extend_from_slice(tx_hash);
+        buf.extend_from_slice(memo);
+
+        let id = tx.insert("data", &buf)?;
+        tx.put::<Index, PersyId>("keys", index, id)?;
+
+        tx.put("meta", "next_index".to_owned(), index + STRIDE)?;
+
+        tx.prepare()?.commit()?;
+
+        Ok(())
+    }
+
+    pub fn push(
+        &self,
+        index: Index,
+        out_commit: Num<Fr>,
+        tx_hash: &[u8],
+        memo: &[u8],
+    ) -> Result<()> {
         let next_index = self.next_index()?;
 
         if index > next_index {
@@ -142,18 +167,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tx_storage_set() {
+    fn test_tx_storage_push() {
         const FILE_NAME: &str = "tx_storage_test_invalid_index.persy";
         let storage = TxStorage::open(FILE_NAME).unwrap();
         defer! {
             std::fs::remove_file(FILE_NAME).unwrap();
         }
 
-        storage.set(0, Num::ZERO, &[0, 1, 2], &[3, 4, 5]).unwrap();
+        let res = storage.push(0, Num::ZERO, &[0, 1, 2], &[3, 4, 5]);
+        assert!(res.is_ok());
+
         let res = storage.set(1, Num::ZERO, &[0, 1, 2], &[3, 4, 5]);
         assert!(res.is_err());
 
-        let res = storage.set(128, Num::ZERO, &[0, 1, 2], &[3, 4, 5]);
+        let res = storage.set(STRIDE, Num::ZERO, &[0, 1, 2], &[3, 4, 5]);
+        assert!(res.is_ok());
+
+        let res = storage.set(STRIDE * 3, Num::ZERO, &[0, 1, 2], &[3, 4, 5]);
+        assert!(res.is_err());
+
+        let res = storage.set(STRIDE * 2, Num::ZERO, &[0, 1, 2], &[3, 4, 5]);
         assert!(res.is_ok());
     }
 }
