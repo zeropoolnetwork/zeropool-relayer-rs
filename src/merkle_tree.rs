@@ -227,7 +227,6 @@ impl Storage {
 
 const H: usize = constants::HEIGHT - constants::OUTPLUSONELOG;
 
-/// A merkle tree for storing commitment hashes as leaves. Won't work for transaction hashes.
 pub struct MerkleTree {
     nodes: Storage,
     /// For empty nodes with index >= length
@@ -302,17 +301,17 @@ impl MerkleTree {
         Ok(())
     }
 
-    // fn set_leaf(&self, index: Index, hash: Hash) -> Result<()> {
-    //     self.set_node(H as Index, index, hash)?;
-    //
-    //     if self.get_node(H as Index, index)?.is_none() {
-    //         self.nodes.set_num_leaves(index + 1)?;
-    //     }
-    //
-    //     self.nodes.add_root(index, hash)?;
-    //
-    //     Ok(())
-    // }
+    fn set_leaf(&self, index: Index, hash: Hash) -> Result<()> {
+        self.set_node(H as Index, index, hash)?;
+
+        if self.get_node(H as Index, index)?.is_none() {
+            self.nodes.set_num_leaves(index + 1)?;
+        }
+
+        self.nodes.add_root(index, hash)?;
+
+        Ok(())
+    }
 
     pub fn add_leaf(&self, hash: Hash) -> Result<()> {
         let index = self.nodes.get_num_leaves()?;
@@ -480,18 +479,18 @@ impl MerkleTree {
         self.nodes.get_root(index)
     }
 
-    // fn get_node(&self, depth: u64, index: u64) -> Result<Option<Hash>> {
-    //     self.nodes.get(depth, index)
-    // }
-    //
-    // pub fn get_node_with_default(&self, depth: u64, index: u64) -> Result<Hash> {
-    //     self.nodes
-    //         .get(depth, index)
-    //         .map(|val| val.unwrap_or_else(|| self.default_nodes[depth as usize]))
-    // }
+    fn get_node(&self, depth: u64, index: u64) -> Result<Option<Hash>> {
+        self.nodes.get(depth, index)
+    }
+
+    pub fn get_node_with_default(&self, depth: u64, index: u64) -> Result<Hash> {
+        self.nodes
+            .get(depth, index)
+            .map(|val| val.unwrap_or_else(|| self.default_nodes[depth as usize]))
+    }
 
     pub fn merkle_proof(&self, index: Index) -> impl Iterator<Item = Result<Hash>> + '_ {
-        (0..H as u64).rev().enumerate().map(move |(i, depth)| {
+        (1..=H as u64).rev().enumerate().map(move |(i, depth)| {
             let cur_index = index >> i;
             let sibling_index = cur_index ^ 1;
             let sibling_hash_res = self
@@ -505,7 +504,7 @@ impl MerkleTree {
 
     pub fn zp_merkle_proof(&self, index: Index) -> Result<MerkleProof<Fr, { H }>> {
         let leaves = self.merkle_proof(index).collect::<Result<_>>()?;
-        let path = (0..H).rev().map(|i| (index >> i) & 1 == 0).collect();
+        let path = (0..H).rev().map(|i| (index >> i) & 1 == 1).collect();
 
         Ok(MerkleProof {
             sibling: leaves,
@@ -664,6 +663,37 @@ mod tests {
             )
             .unwrap()
         );
+    }
+
+    #[test]
+    fn test_tree_zp_merkle_proof() {
+        let mut old_tree = libzeropool_rs::merkle::MerkleTree::new_test(POOL_PARAMS.clone());
+
+        let (_, tree) = tree();
+
+        assert_eq!(tree.root().unwrap(), old_tree.get_root());
+
+        let assert_proofs_eq = |lhs: &MerkleProof<_, H>, rhs: &MerkleProof<_, H>| {
+            for (i, (lhs, rhs)) in lhs.sibling.iter().zip(rhs.sibling.iter()).enumerate() {
+                assert_eq!(lhs, rhs);
+            }
+
+            for (i, (lhs, rhs)) in lhs.path.iter().zip(rhs.path.iter()).enumerate() {
+                assert_eq!(lhs, rhs);
+            }
+        };
+
+        let reference_proof = old_tree.get_proof_unchecked::<{ H }>(0);
+        let proof = tree.zp_merkle_proof(0).unwrap();
+        assert_proofs_eq(&proof, &reference_proof);
+
+        let commit = Num::from(123u64);
+        old_tree.add_leafs_and_commitments(Vec::new(), vec![(0, commit)]);
+        tree.add_leaf(commit).unwrap();
+
+        let reference_proof = old_tree.get_proof_unchecked::<{ H }>(0);
+        let proof = tree.zp_merkle_proof(0).unwrap();
+        assert_proofs_eq(&proof, &reference_proof);
     }
 
     // TODO: Generate test cases on the fly

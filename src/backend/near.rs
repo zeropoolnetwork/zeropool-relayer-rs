@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use axum::async_trait;
 use borsh::BorshDeserialize;
@@ -8,16 +10,17 @@ use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::{
     transaction::{Action, FunctionCallAction, Transaction},
     types::{AccountId, BlockReference, Finality, FunctionArgs},
-    views::{ActionView, FinalExecutionOutcomeView, QueryRequest},
+    views::{ActionView, FinalExecutionOutcomeView, FinalExecutionStatus, QueryRequest},
 };
 use reqwest::Url;
 use serde::Deserialize;
+use tokio::time::sleep;
 use zeropool_tx::TxData;
 
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
-    Engine, Fr, Proof,
+    Fr, Proof,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -161,6 +164,33 @@ impl BlockchainBackend for NearBackend {
 
         // TODO: Check the status of the transaction
         let tx_hash = self.client.call(request).await?;
+
+        loop {
+            tracing::info!("Checking transaction status");
+            let status_req = methods::tx::RpcTransactionStatusRequest {
+                transaction_info: methods::tx::TransactionInfo::TransactionId {
+                    hash: tx_hash,
+                    account_id: self.signer.account_id.clone(),
+                },
+            };
+
+            let response = self.client.call(status_req).await?;
+
+            match response.status {
+                FinalExecutionStatus::Failure(err) => {
+                    tracing::error!("Transaction failed");
+                    anyhow::bail!("Transaction failed: {:?}", err);
+                }
+                FinalExecutionStatus::SuccessValue(_) => {
+                    tracing::info!("Transaction succeeded");
+                    break;
+                }
+                _ => {
+                    tracing::info!("Transaction pending");
+                    sleep(Duration::from_secs(1)).await; // TODO: exponential backoff
+                }
+            };
+        }
 
         Ok(tx_hash.0.to_vec())
     }

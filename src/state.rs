@@ -8,16 +8,12 @@ use libzeropool_rs::libzeropool::fawkes_crypto::backend::plonk::{
 };
 use libzeropool_rs::libzeropool::fawkes_crypto::{circuit::cs::CS, engines::U256};
 #[cfg(feature = "plonk")]
-use libzeropool_rs::{
-    libzeropool::{
-        circuit::{
-            tree::{tree_update, CTreePub, CTreeSec},
-            tx::{c_transfer, CTransferPub, CTransferSec},
-        },
-        fawkes_crypto::{circuit::cs::BuildCS, core::signal::Signal},
-        POOL_PARAMS,
+use libzeropool_rs::libzeropool::{
+    circuit::{
+        tree::{tree_update, CTreePub, CTreeSec},
+        tx::{c_transfer, CTransferPub, CTransferSec},
     },
-    proof_plonk::prove_tx,
+    POOL_PARAMS,
 };
 use tokio::sync::{Mutex, RwLock};
 
@@ -28,7 +24,7 @@ use crate::{
     merkle_tree::MerkleTree,
     tx_storage::TxStorage,
     tx_worker::{Payload, WorkerJobQueue},
-    Engine, Fr, Parameters, VK,
+    Engine, Fr, VK,
 };
 
 const TX_INDEX_STRIDE: usize = libzeropool_rs::libzeropool::constants::OUT + 1;
@@ -155,6 +151,7 @@ impl AppState {
                 c_transfer(&public, &secret, &*POOL_PARAMS);
             }
 
+            tracing::info!("Setting up Plonk keys...");
             let (_, tree_pk) = setup(&params, tree_circuit);
             let (transfer_vk, _) = setup(&params, tx_circuit);
 

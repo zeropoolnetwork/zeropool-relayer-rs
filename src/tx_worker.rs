@@ -10,7 +10,6 @@ use libzeropool_rs::libzeropool::fawkes_crypto::backend::bellman_groth16::{
 use libzeropool_rs::libzeropool::fawkes_crypto::backend::plonk::prover::Proof;
 use libzeropool_rs::libzeropool::{
     constants,
-    fawkes_crypto::ff_uint::Num,
     native::tree::{TreePub, TreeSec},
     POOL_PARAMS,
 };
@@ -171,17 +170,39 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     let full_tx = TxData {
         tx_type: tx.tx_type,
         delta: tx.delta,
+        token_id: ctx.config.backend.token_id(),
         out_commit: tx.out_commit,
         nullifier: tx.nullifier,
-        memo: tx.memo.clone(),
+        proof: tx.proof,
         root_after,
         tree_proof,
-        proof: tx.proof,
+        memo: tx.memo.clone(),
         extra_data: tx.extra_data,
-        token_id: String::new(),
     };
 
-    tracing::debug!("Transaction prepared");
+    // TODO: Proper human-readable Debug implementation for TxData
+    tracing::debug!(
+        r#"Transaction prepared:
+    tx_type: {:?}
+    delta: {}
+    token_id: {}
+    out_commit: {}
+    nullifier: {}
+    proof: ...
+    root_after: {}
+    tree_proof: ...
+    memo: {:?}
+    extra_data: {:?}
+"#,
+        full_tx.tx_type,
+        full_tx.delta,
+        full_tx.token_id,
+        full_tx.out_commit,
+        full_tx.nullifier,
+        full_tx.root_after,
+        hex::encode(&full_tx.memo),
+        hex::encode(&full_tx.extra_data)
+    );
 
     // TODO: Use a separate ordered queue for sending transactions?
     loop {
@@ -204,7 +225,7 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         }
     }
 
-    tracing::debug!("Sending tx: {full_tx:#?}");
+    tracing::info!("Sending tx");
 
     let tx_hash = match ctx.backend.send_tx(full_tx).await {
         Ok(tx_hash) => tx_hash,

@@ -5,7 +5,7 @@ use zeropool_tx::TxData;
 
 use crate::{
     tx::{ParsedTxData, TxValidationError},
-    Engine, Fr, Proof,
+    Fr, Proof,
 };
 
 #[cfg(feature = "evm_backend")]

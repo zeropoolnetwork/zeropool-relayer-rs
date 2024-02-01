@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use axum::{
     extract::{Path, Query, State},
-    http::{Method, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -99,9 +99,6 @@ async fn create_transaction(
     if !validation_errors.is_empty() {
         return Err(AppError::TxValidationErrors(validation_errors));
     }
-
-    // TODO: Modify state before creating a job
-    // let job_data = prepare_job(tx);
 
     let payload = prepare_job(tx, state.clone()).await?;
     let job_id = state.job_queue.push(payload).await?;
@@ -244,7 +241,7 @@ async fn get_transactions(
     let txs = state
         .transactions
         .iter_range(offset..(offset + limit * 128))?
-        .map(|res| res.map(|(index, data)| Hex(data)))
+        .map(|res| res.map(|(_, data)| Hex(data)))
         .collect::<Result<_, _>>()?;
 
     Ok(Json(txs))

@@ -12,6 +12,20 @@ pub enum BackendKind {
     Waves(crate::backend::waves::Config),
 }
 
+impl BackendKind {
+    pub fn token_id(&self) -> String {
+        match self {
+            BackendKind::Mock => "mock".to_string(),
+            #[cfg(feature = "evm_backend")]
+            BackendKind::Evm(config) => config.token_address.clone(),
+            #[cfg(feature = "near_backend")]
+            BackendKind::Near(config) => config.token_id.to_string().clone(),
+            #[cfg(feature = "waves_backend")]
+            BackendKind::Waves(_config) => String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,

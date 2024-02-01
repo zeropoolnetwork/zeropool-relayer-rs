@@ -16,7 +16,7 @@ use zeropool_tx::TxData;
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},
     tx::{ParsedTxData, TxValidationError},
-    Engine, Fr, Proof,
+    Fr, Proof,
 };
 
 #[derive(Debug, Clone, Deserialize)]
