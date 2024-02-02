@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use axum::async_trait;
 use borsh::BorshDeserialize;
+use itertools::Itertools;
 use libzeropool_rs::libzeropool::fawkes_crypto::{engines::U256, ff_uint::Uint};
 use near_crypto::InMemorySigner;
 use near_jsonrpc_client::{methods, JsonRpcClient};
@@ -15,7 +16,7 @@ use near_primitives::{
 use reqwest::Url;
 use serde::Deserialize;
 use tokio::time::sleep;
-use zeropool_tx::TxData;
+use zeropool_tx::{TxData, TxType};
 
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},
@@ -165,6 +166,8 @@ impl BlockchainBackend for NearBackend {
         // TODO: Check the status of the transaction
         let tx_hash = self.client.call(request).await?;
 
+        tracing::debug!("Near transaction sent: {}", tx_hash);
+
         loop {
             tracing::info!("Checking transaction status");
             let status_req = methods::tx::RpcTransactionStatusRequest {
@@ -174,7 +177,14 @@ impl BlockchainBackend for NearBackend {
                 },
             };
 
-            let response = self.client.call(status_req).await?;
+            let response = match self.client.call(status_req).await {
+                Ok(res) => res,
+                Err(err) => {
+                    // TODO: Limit number of attempts?
+                    tracing::warn!("Failed to fetch tx status: {:?}", err);
+                    continue;
+                }
+            };
 
             match response.status {
                 FinalExecutionStatus::Failure(err) => {
@@ -240,6 +250,20 @@ impl BlockchainBackend for NearBackend {
         let r = &mut calldata.as_slice();
         let tx = zeropool_tx::near::read(r)?;
         Ok(tx)
+    }
+
+    fn extract_ciphertext_from_memo<'a>(&self, memo: &'a [u8], tx_type: TxType) -> &'a [u8] {
+        let offset: usize = match tx_type {
+            TxType::Deposit | TxType::Transfer => 8,
+            TxType::Withdraw => {
+                let addr_len_bytes: [u8; 4] = memo[20..24].try_into().unwrap_or_default();
+                let addr_len = u32::from_le_bytes(addr_len_bytes) as usize;
+
+                16 + 4 + addr_len
+            }
+        };
+
+        &memo[offset..]
     }
 
     fn parse_hash(&self, hash: &str) -> Result<Vec<u8>> {
@@ -315,6 +339,12 @@ impl NearblocksClient {
             predecessor_account_id: String,
             receiver_account_id: String,
             actions: Vec<Action>,
+            outcomes: Outcome,
+        }
+
+        #[derive(Deserialize)]
+        struct Outcome {
+            status: bool,
         }
 
         #[derive(Deserialize)]
@@ -336,7 +366,7 @@ impl NearblocksClient {
         let mut response = reqwest::get(url).await?.json::<Response>().await?;
 
         let relevant_txs = response.txns.drain(..).filter_map(|tx| {
-            if tx.receiver_account_id != self.account.as_str() {
+            if tx.receiver_account_id != self.account.as_str() || !tx.outcomes.status {
                 return None;
             }
 

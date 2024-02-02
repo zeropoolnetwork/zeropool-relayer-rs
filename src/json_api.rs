@@ -209,7 +209,7 @@ struct Hex(#[serde(with = "hex")] Vec<u8>);
 async fn get_transactions_legacy(
     State(state): State<Arc<AppState>>,
     Query(pagination): Query<TxPaginationQuery>,
-) -> AppResult<Json<Vec<Hex>>> {
+) -> AppResult<Json<Vec<String>>> {
     let limit = pagination.limit.unwrap_or(100);
     let offset = pagination.offset.unwrap_or(0);
     let pool_index = *state.pool_index.read().await;
@@ -220,9 +220,8 @@ async fn get_transactions_legacy(
         .map(|res| {
             res.map(|(index, data)| {
                 let is_mined = (index < pool_index) as u8;
-                let data = [&[is_mined], data.as_slice()].concat();
-
-                Hex(data)
+                let h = hex::encode(&data);
+                format!("{is_mined}{h}")
             })
         })
         .collect::<Result<_, _>>()?;

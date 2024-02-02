@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::async_trait;
 use libzeropool_rs::libzeropool::fawkes_crypto::engines::U256;
 use tokio::sync::Mutex;
-use zeropool_tx::TxData;
+use zeropool_tx::{TxData, TxType};
 
 use crate::{
     backend::{BlockchainBackend, TxCalldata, TxHash},

@@ -54,7 +54,8 @@ pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload
         next_commit_index * TX_SIZE,
         tx.out_commit,
         &vec![0; 32],
-        &tx.memo,
+        ctx.backend
+            .extract_ciphertext_from_memo(&tx.memo, tx.tx_type),
     )?;
 
     // Prepare the data for the prover.
@@ -87,9 +88,16 @@ pub async fn prepare_job(tx: ParsedTxData, ctx: Arc<AppState>) -> Result<Payload
 pub async fn process_failure(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
     let prev_commit_index = job.data.prev_commit_index;
 
+    let rollback_to = if prev_commit_index > 0 {
+        // The rollback index is inclusive
+        prev_commit_index + 1
+    } else {
+        0
+    };
+
     tracing::info!("Rolling back tx storage to {prev_commit_index}");
-    ctx.transactions.rollback(prev_commit_index)?;
-    ctx.tree.lock().await.rollback(prev_commit_index)?;
+    ctx.transactions.rollback(rollback_to * TX_SIZE)?;
+    ctx.tree.lock().await.rollback(rollback_to)?;
     ctx.job_queue.cancel_jobs_after(job.id).await?;
     tracing::info!("Rollback complete");
 
@@ -245,7 +253,8 @@ pub async fn process_job(job: Job<Payload>, ctx: Arc<AppState>) -> Result<()> {
         next_commit_index * TX_SIZE,
         tx.out_commit,
         &tx_hash,
-        &tx.memo,
+        ctx.backend
+            .extract_ciphertext_from_memo(&tx.memo, tx.tx_type),
     )?;
 
     *ctx.pool_index.write().await += TX_SIZE;

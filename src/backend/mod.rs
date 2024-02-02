@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::async_trait;
 use libzeropool_rs::libzeropool::fawkes_crypto::engines::U256;
-use zeropool_tx::TxData;
+use zeropool_tx::{TxData, TxType};
 
 use crate::{
     tx::{ParsedTxData, TxValidationError},
@@ -37,6 +37,14 @@ pub trait BlockchainBackend: Sync + Send {
     async fn get_merkle_root(&self, index: u64) -> Result<Option<U256>>;
 
     fn parse_calldata(&self, calldata: Vec<u8>) -> Result<TxData<Fr, Proof>>;
+    fn extract_ciphertext_from_memo<'a>(&self, memo: &'a [u8], tx_type: TxType) -> &'a [u8] {
+        let offset = match tx_type {
+            TxType::Deposit | TxType::Transfer => 8,
+            TxType::Withdraw => 36,
+        };
+
+        &memo[offset..]
+    }
 
     fn parse_hash(&self, hash: &str) -> Result<Vec<u8>>;
     fn format_hash(&self, hash: &[u8]) -> String;

@@ -1,44 +1,52 @@
 use anyhow::Result;
+use axum::async_trait;
+use libzeropool_rs::libzeropool::fawkes_crypto::engines::U256;
 use serde::Deserialize;
+use zeropool_tx::{TxData, TxType};
 
 use crate::{
-    backend::{BlockchainBackend, TxHash},
-    tx::{FullTxData, ParsedTxData, TxValidationError},
+    backend::{BlockchainBackend, TxCalldata, TxHash},
+    tx::{ParsedTxData, TxValidationError},
+    Fr, Proof,
 };
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {}
 
 pub struct SubstrateBackend {
-    private_key: PrivateKey,
-    public_key: PublicKey,
-    address: Address,
-    node: Node,
+    // private_key: PrivateKey,
+    // public_key: PublicKey,
+    // address: Address,
+    // node: Node,
 }
 
 impl SubstrateBackend {
     pub async fn new() -> Result<Self> {
         Ok(Self {
-            private_key,
-            public_key,
-            address,
-            node,
+            // private_key,
+            // public_key,
+            // address,
+            // node,
         })
     }
 }
 
 #[async_trait]
 impl BlockchainBackend for SubstrateBackend {
-    async fn init_state(&self) -> Result<Vec<TxCalldata>> {
-        Ok(vec![])
+    fn name(&self) -> &'static str {
+        "substrate"
     }
 
-    fn validate_tx(&self, tx: &ParsedTxData) -> Vec<TxValidationError> {
+    async fn fetch_latest_transactions(&self) -> Result<Vec<TxCalldata>> {
+        todo!()
+    }
+
+    async fn validate_tx(&self, _tx: &ParsedTxData) -> Vec<TxValidationError> {
         vec![]
     }
 
     /// Sign and send a transaction to the blockchain.
-    async fn send_tx(&self, tx: FullTxData) -> Result<TxHash> {
+    async fn send_tx(&self, _tx: TxData<Fr, Proof>) -> Result<TxHash> {
         todo!()
     }
 
@@ -46,7 +54,15 @@ impl BlockchainBackend for SubstrateBackend {
         todo!()
     }
 
-    fn parse_calldata(&self, calldata: Vec<u8>) -> Result<FullTxData> {
+    async fn get_merkle_root(&self, _index: u64) -> Result<Option<U256>> {
+        todo!()
+    }
+
+    fn parse_calldata(&self, _calldata: Vec<u8>) -> Result<TxData<Fr, Proof>> {
+        todo!()
+    }
+
+    fn extract_ciphertext_from_memo(&self, _memo: &[u8], _tx_type: TxType) -> &[u8] {
         todo!()
     }
 

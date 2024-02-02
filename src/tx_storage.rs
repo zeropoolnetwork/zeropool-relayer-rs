@@ -45,6 +45,10 @@ impl TxStorage {
         tx_hash: &[u8],
         memo: &[u8],
     ) -> Result<()> {
+        if index % STRIDE != 0 {
+            anyhow::bail!("Index must be in steps of {STRIDE}")
+        }
+
         let mut tx = self.db.begin()?;
 
         let mut buf =
@@ -108,6 +112,10 @@ impl TxStorage {
 
     /// Remove all transactions with indices >= `index`.
     pub fn rollback(&self, index: Index) -> Result<()> {
+        if index % STRIDE != 0 {
+            anyhow::bail!("Index must be in steps of {STRIDE}")
+        }
+
         let indices = self.db.range::<Index, PersyId, _>("keys", index..)?;
 
         let mut tx = self.db.begin()?;

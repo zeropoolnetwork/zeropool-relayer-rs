@@ -113,7 +113,12 @@ impl AppState {
                 let tx_hash = tx.hash;
 
                 tree.add_leaf(tx_data.out_commit)?;
-                transactions.set(tx_index as u64, tx_data.out_commit, &tx_hash, &tx_data.memo)?;
+                transactions.set(
+                    tx_index as u64,
+                    tx_data.out_commit,
+                    &tx_hash,
+                    backend.extract_ciphertext_from_memo(&tx_data.memo, tx_data.tx_type),
+                )?;
             }
 
             relayer_index = tree.num_leaves() * TX_INDEX_STRIDE as u64;
